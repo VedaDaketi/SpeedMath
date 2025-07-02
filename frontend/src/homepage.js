@@ -51,11 +51,11 @@ export default function Auth() {
           if (data.user && data.user.role === 'admin') {
             console.log('Redirecting to Admin Dashboard...');
             alert(`Welcome Admin ${data.user.username}! Redirecting to Admin Dashboard...`);
-            // window.location.href = '/admin-dashboard';
+            window.location.href = '/admin-dashboard';
           } else {
             console.log('Redirecting to Learner Dashboard...');
             alert(`Welcome ${username}! Redirecting to Learner Dashboard...`);
-             window.location.href = '/learner-dashboard';
+            window.location.href = '/learner-dashboard';
           }
         }
       } else {
