@@ -1,0 +1,308 @@
+from flask import Flask, request, jsonify, session
+from flask_sqlalchemy import SQLAlchemy
+from flask_cors import CORS
+from werkzeug.security import generate_password_hash, check_password_hash
+from datetime import datetime, timedelta, date
+import jwt
+import os
+from functools import wraps
+from enum import Enum
+
+app = Flask(__name__)
+
+# Configuration
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'q1w2e3r4t5y6u7i8o9p0')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'postgresql://postgres:357951@localhost/speedmath')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['JWT_EXPIRATION_DELTA'] = timedelta(hours=24)
+
+# Initialize extensions
+db = SQLAlchemy(app)
+CORS(app, origins=["http://localhost:3000"], supports_credentials=True)
+
+# Role enumeration
+class UserRole(Enum):
+    LEARNER = "learner"
+    ADMIN = "admin"
+
+ADMIN_USERNAMES = ['akshay', 'pranav', 'veda']  
+
+# User Model with Roles
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=True)
+    password_hash = db.Column(db.String(255), nullable=False)
+    date_of_birth = db.Column(db.Date, nullable=False)
+    grade_qualification = db.Column(db.String(100), nullable=False)
+    role = db.Column(db.Enum(UserRole), nullable=False, default=UserRole.LEARNER)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    last_login = db.Column(db.DateTime)
+    is_active = db.Column(db.Boolean, default=True)
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+
+    def is_admin(self):
+        return self.role == UserRole.ADMIN
+
+    def is_learner(self):
+        return self.role == UserRole.LEARNER
+
+    def generate_token(self):
+        payload = {
+            'user_id': self.id,
+            'username': self.username,
+            'role': self.role.value,
+            'exp': datetime.utcnow() + app.config['JWT_EXPIRATION_DELTA']
+        }
+        return jwt.encode(payload, app.config['SECRET_KEY'], algorithm='HS256')
+
+# Token validation decorator
+def token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = request.headers.get('Authorization')
+        if not token:
+            return jsonify({'error': 'Token is missing'}), 401
+        
+        try:
+            if token.startswith('Bearer '):
+                token = token[7:]
+            data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+            current_user = User.query.get(data['user_id'])
+            if not current_user or not current_user.is_active:
+                return jsonify({'error': 'Invalid token'}), 401
+        except jwt.ExpiredSignatureError:
+            return jsonify({'error': 'Token has expired'}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({'error': 'Invalid token'}), 401
+        
+        return f(current_user, *args, **kwargs)
+    return decorated
+
+# Admin only decorator
+def admin_required(f):
+    @wraps(f)
+    @token_required
+    def decorated(current_user, *args, **kwargs):
+        if not current_user.is_admin():
+            return jsonify({'error': 'Admin access required'}), 403
+        return f(current_user, *args, **kwargs)
+    return decorated
+
+# Routes
+@app.route('/api/register', methods=['POST'])
+def register():
+    try:
+        data = request.get_json()
+        
+        # Validation
+        required_fields = ['username', 'password', 'date_of_birth', 'grade_qualification']
+        for field in required_fields:
+            if not data or not data.get(field):
+                return jsonify({'error': f'{field.replace("_", " ").title()} is required'}), 400
+        
+        username = data.get('username').strip()
+        password = data.get('password')
+        email = data.get('email', '').strip() if data.get('email') else None
+        date_of_birth_str = data.get('date_of_birth')
+        grade_qualification = data.get('grade_qualification').strip()
+        
+        # Check password strength
+        if len(password) < 8:
+            return jsonify({'error': 'Password must be at least 8 characters long'}), 400
+        
+        # Validate and parse date of birth
+        try:
+            date_of_birth = datetime.strptime(date_of_birth_str, '%Y-%m-%d').date()
+            # Check if user is at least 5 years old (reasonable minimum for math learning)
+            min_age_date = date.today() - timedelta(days=5*365)
+            if date_of_birth > min_age_date:
+                return jsonify({'error': 'User must be at least 5 years old'}), 400
+        except ValueError:
+            return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
+        
+        # Check if user already exists
+        if User.query.filter_by(username=username).first():
+            return jsonify({'error': 'Username already exists'}), 409
+        
+        if email and User.query.filter_by(email=email).first():
+            return jsonify({'error': 'Email already exists'}), 409
+        
+        # Determine role based on username
+        role = UserRole.ADMIN if username.lower() in [admin.lower() for admin in ADMIN_USERNAMES] else UserRole.LEARNER
+        
+        # Create new user
+        user = User(
+            username=username, 
+            email=email, 
+            date_of_birth=date_of_birth,
+            grade_qualification=grade_qualification,
+            role=role
+        )
+        user.set_password(password)
+        
+        db.session.add(user)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'User registered successfully',
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'email': user.email,
+                'date_of_birth': user.date_of_birth.isoformat(),
+                'grade_qualification': user.grade_qualification,
+                'role': user.role.value
+            }
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': 'Registration failed'}), 500
+
+@app.route('/api/login', methods=['POST'])
+def login():
+    try:
+        data = request.get_json()
+        
+        if not data or not data.get('username') or not data.get('password'):
+            return jsonify({'error': 'Username and password are required'}), 400
+        
+        username = data.get('username').strip()
+        password = data.get('password')
+        
+        # Find user
+        user = User.query.filter_by(username=username).first()
+        
+        if not user or not user.check_password(password):
+            return jsonify({'error': 'Invalid username or password'}), 401
+        
+        if not user.is_active:
+            return jsonify({'error': 'Account is deactivated'}), 401
+        
+        # Update last login
+        user.last_login = datetime.utcnow()
+        db.session.commit()
+        
+        # Generate token
+        token = user.generate_token()
+        
+        return jsonify({
+            'message': 'Login successful',
+            'token': token,
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'email': user.email,
+                'role': user.role.value
+            }
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': 'Login failed'}), 500
+
+@app.route('/api/profile', methods=['GET'])
+@token_required
+def get_profile(current_user):
+    return jsonify({
+        'user': {
+            'id': current_user.id,
+            'username': current_user.username,
+            'email': current_user.email,
+            'date_of_birth': current_user.date_of_birth.isoformat(),
+            'grade_qualification': current_user.grade_qualification,
+            'role': current_user.role.value,
+            'created_at': current_user.created_at.isoformat(),
+            'last_login': current_user.last_login.isoformat() if current_user.last_login else None
+        }
+    })
+
+@app.route('/api/admin/users', methods=['GET'])
+@admin_required
+def get_all_users(current_user):
+    """Admin only: Get all users"""
+    users = User.query.all()
+    return jsonify({
+        'users': [{
+            'id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'date_of_birth': user.date_of_birth.isoformat(),
+            'grade_qualification': user.grade_qualification,
+            'role': user.role.value,
+            'is_active': user.is_active,
+            'created_at': user.created_at.isoformat(),
+            'last_login': user.last_login.isoformat() if user.last_login else None
+        } for user in users]
+    })
+
+@app.route('/api/admin/users/<int:user_id>/toggle-status', methods=['POST'])
+@admin_required
+def toggle_user_status(current_user, user_id):
+    """Admin only: Activate/Deactivate a user"""
+    user = User.query.get_or_404(user_id)
+    
+    # Prevent admin from deactivating themselves
+    if user.id == current_user.id:
+        return jsonify({'error': 'Cannot deactivate your own account'}), 400
+    
+    user.is_active = not user.is_active
+    db.session.commit()
+    
+    return jsonify({
+        'message': f'User {"activated" if user.is_active else "deactivated"} successfully',
+        'user': {
+            'id': user.id,
+            'username': user.username,
+            'is_active': user.is_active
+        }
+    })
+
+@app.route('/api/admin/users/<int:user_id>/change-role', methods=['POST'])
+@admin_required
+def change_user_role(current_user, user_id):
+    """Admin only: Change user role"""
+    data = request.get_json()
+    new_role = data.get('role')
+    
+    if new_role not in [role.value for role in UserRole]:
+        return jsonify({'error': 'Invalid role'}), 400
+    
+    user = User.query.get_or_404(user_id)
+    
+    # Prevent admin from changing their own role
+    if user.id == current_user.id:
+        return jsonify({'error': 'Cannot change your own role'}), 400
+    
+    user.role = UserRole(new_role)
+    db.session.commit()
+    
+    return jsonify({
+        'message': 'User role updated successfully',
+        'user': {
+            'id': user.id,
+            'username': user.username,
+            'role': user.role.value
+        }
+    })
+
+@app.route('/api/logout', methods=['POST'])
+@token_required
+def logout(current_user):
+    return jsonify({'message': 'Logged out successfully'}), 200
+
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    return jsonify({'status': 'healthy', 'timestamp': datetime.utcnow().isoformat()})
+
+# Create tables
+with app.app_context():
+    db.create_all()
+
+if __name__ == '__main__':
+    app.run(debug=True, port=5000)

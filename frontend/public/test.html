@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VedicMath - Ancient Wisdom, Modern Learning</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        /* Navigation */
+        .navbar {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 1rem 0;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .nav-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 2rem;
+        }
+
+        .logo {
+            font-size: 1.8rem;
+            font-weight: bold;
+            background: linear-gradient(45deg, #ff6b35, #f7931e);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .nav-links {
+            display: flex;
+            list-style: none;
+            gap: 2rem;
+        }
+
+        .nav-links li {
+            position: relative;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            color: #333;
+            font-weight: 500;
+            padding: 0.5rem 1rem;
+            border-radius: 25px;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .nav-links a:hover,
+        .nav-links a.active {
+            background: linear-gradient(45deg, #ff6b35, #f7931e);
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(255, 107, 53, 0.3);
+        }
+
+        .nav-icon {
+            font-size: 1.1rem;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            position: fixed;
+            top: 0;
+            right: -400px;
+            width: 400px;
+            height: 100vh;
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(20px);
+            box-shadow: -4px 0 20px rgba(0, 0, 0, 0.15);
+            z-index: 1001;
+            transition: right 0.4s ease;
+            overflow-y: auto;
+        }
+
+        .sidebar.open {
+            right: 0;
+        }
+
+        .sidebar-header {
+            padding: 2rem;
+            background: linear-gradient(45deg, #ff6b35, #f7931e);
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .sidebar-title {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+
+        .sidebar-close {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0.5rem;
+            border-radius: 50%;
+            transition: background 0.3s ease;
+        }
+
+        .sidebar-close:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .sidebar-content {
+            padding: 2rem;
+        }
+
+        .profile-section-sidebar {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .profile-avatar-sidebar {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            background: linear-gradient(45deg, #ff6b35, #f7931e);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 1rem;
+            font-size: 2.5rem;
+            color: white;
+            box-shadow: 0 8px 25px rgba(255, 107, 53, 0.3);
+        }
+
+        .profile-name-sidebar {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 0.5rem;
+        }
+
+        .profile-title-sidebar {
+            color: #666;
+            font-size: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .profile-stats-sidebar {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .profile-stat-sidebar {
+            text-align: center;
+            padding: 1rem;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .profile-stat-sidebar:hover {
+            border-color: #ff6b35;
+            transform: translateY(-2px);
+        }
+
+        .profile-stat-number-sidebar {
+            font-size: 1.3rem;
+            font-weight: bold;
+            color: #ff6b35;
+            margin-bottom: 0.25rem;
+        }
+
+        .profile-stat-label-sidebar {
+            color: #666;
+            font-size: 0.85rem;
+        }
+
+        .sidebar-section {
+            margin-bottom: 2rem;
+        }
+
+        .sidebar-section h3 {
+            font-size: 1.2rem;
+            color: #333;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+
+
+        .progress-item {
+            margin-bottom: 1rem;
+        }
+
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+        }
+
+        .progress-title {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .progress-percentage {
+            color: #ff6b35;
+            font-weight: 600;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e9ecef;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(45deg, #ff6b35, #f7931e);
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+
+        /* Sidebar overlay */
+        .sidebar-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 999;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .sidebar-overlay.show {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        /* Main Content */
+        .main-content {
+            margin-top: 80px;
+            padding: 2rem;
+            transition: margin-right 0.4s ease;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        /* Hero Section */
+        .hero {
+            text-align: center;
+            padding: 4rem 0;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            margin-bottom: 3rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+
+        .hero h1 {
+            font-size: 3.5rem;
+            color: white;
+            margin-bottom: 1rem;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .hero p {
+            font-size: 1.3rem;
+            color: rgba(255, 255, 255, 0.9);
+            margin-bottom: 2rem;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            line-height: 1.6;
+        }
+
+        .cta-button {
+            background: linear-gradient(45deg, #ff6b35, #f7931e);
+            color: white;
+            padding: 1rem 2rem;
+            border: none;
+            border-radius: 50px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+            box-shadow: 0 4px 15px rgba(255, 107, 53, 0.3);
+        }
+
+        .cta-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(255, 107, 53, 0.4);
+        }
+
+        /* Features Grid */
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+
+        .feature-card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 2rem;
+            text-align: center;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .feature-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 3px;
+            background: linear-gradient(45deg, #ff6b35, #f7931e);
+            transition: left 0.3s ease;
+        }
+
+        .feature-card:hover::before {
+            left: 0;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 35px rgba(0, 0, 0, 0.15);
+        }
+
+        .feature-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            background: linear-gradient(45deg, #ff6b35, #f7931e);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .feature-card h3 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: #333;
+        }
+
+        .feature-card p {
+            color: #666;
+            line-height: 1.6;
+        }
+
+        /* Stats Section */
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 2rem;
+            margin: 3rem 0;
+            padding: 2rem;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+        }
+
+        .stat-item {
+            text-align: center;
+            color: white;
+        }
+
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(45deg, #fff, #f0f0f0);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .stat-label {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        /* Lessons Preview */
+        .lessons-preview {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 3rem;
+            margin: 3rem 0;
+        }
+
+        .lessons-preview h2 {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 2rem;
+            background: linear-gradient(45deg, #ff6b35, #f7931e);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .lesson-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .lesson-item {
+            padding: 1.5rem;
+            border: 2px solid #f0f0f0;
+            border-radius: 12px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .lesson-item:hover {
+            border-color: #ff6b35;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(255, 107, 53, 0.2);
+        }
+
+        .lesson-number {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #ff6b35;
+            margin-bottom: 0.5rem;
+        }
+
+        .lesson-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #333;
+        }
+
+        .lesson-description {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        /* Floating Animation */
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .floating {
+            animation: float 3s ease-in-out infinite;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 100%;
+                right: -100%;
+            }
+            
+            .nav-links {
+                gap: 1rem;
+            }
+            
+            .nav-links span:not(.nav-icon) {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="logo">🕉️ VedicMath</div>
+            <ul class="nav-links">
+                <li><a href="./test.html" class="nav-link active">
+                    <span class="nav-icon">🏠</span>
+                    <span>Home</span>
+                </a></li>
+                <li><a href="./lessons.html" class="nav-link">
+                    <span class="nav-icon">📚</span>
+                    <span>Lessons</span>
+                </a></li>
+                <li><a href="./challenges.html" class="nav-link">
+                    <span class="nav-icon">🏆</span>
+                    <span>Challenges</span>
+                </a></li>
+                <li><a href="#profile" class="nav-link" id="profile-nav">
+                    <span class="nav-icon">👤</span>
+                    <span>Profile</span>
+                </a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Sidebar Overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- Sidebar -->
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-title">Your Profile</div>
+            <button class="sidebar-close" id="sidebarClose">✕</button>
+        </div>
+        
+        <div class="sidebar-content">
+            <!-- Profile Section -->
+            <div class="profile-section-sidebar">
+                <div class="profile-avatar-sidebar">👤</div>
+                <div class="profile-name-sidebar">Mathematics Explorer</div>
+                <div class="profile-title-sidebar">Vedic Math Student</div>
+                
+                <div class="profile-stats-sidebar">
+                    <div class="profile-stat-sidebar">
+                        <div class="profile-stat-number-sidebar">8</div>
+                        <div class="profile-stat-label-sidebar">Lessons Completed</div>
+                    </div>
+                    <div class="profile-stat-sidebar">
+                        <div class="profile-stat-number-sidebar">156</div>
+                        <div class="profile-stat-label-sidebar">Problems Solved</div>
+                    </div>
+                    <div class="profile-stat-sidebar">
+                        <div class="profile-stat-number-sidebar">85%</div>
+                        <div class="profile-stat-label-sidebar">Accuracy Rate</div>
+                    </div>
+                    <div class="profile-stat-sidebar">
+                        <div class="profile-stat-number-sidebar">12</div>
+                        <div class="profile-stat-label-sidebar">Day Streak</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Progress Section -->
+            <div class="sidebar-section">
+                <h3>Learning Progress</h3>
+                <div class="progress-item">
+                    <div class="progress-header">
+                        <span class="progress-title">Basic Sutras</span>
+                        <span class="progress-percentage">75%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: 75%"></div>
+                    </div>
+                </div>
+                <div class="progress-item">
+                    <div class="progress-header">
+                        <span class="progress-title">Multiplication</span>
+                        <span class="progress-percentage">90%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: 90%"></div>
+                    </div>
+                </div>
+                <div class="progress-item">
+                    <div class="progress-header">
+                        <span class="progress-title">Division</span>
+                        <span class="progress-percentage">60%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: 60%"></div>
+                    </div>
+                </div>
+                <div class="progress-item">
+                    <div class="progress-header">
+                        <span class="progress-title">Advanced Techniques</span>
+                        <span class="progress-percentage">45%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: 45%"></div>
+                    </div>
+                </div>
+            </div>
+
+
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <div class="container">
+            <!-- Hero Section -->
+            <section id="home" class="hero">
+                <h1 class="floating">Master Vedic Mathematics</h1>
+                <p>Discover the ancient Indian system of mathematics that makes calculations faster, easier, and more intuitive. Learn time-tested techniques that have been used for over 3000 years.</p>
+                <a href="#lessons" class="cta-button">Start Learning Today</a>
+            </section>
+
+            <!-- Stats Section -->
+            <section class="stats">
+                <div class="stat-item">
+                    <div class="stat-number">16</div>
+                    <div class="stat-label">Sutras (Formulas)</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number">13</div>
+                    <div class="stat-label">Sub-Sutras</div>
+                </div>
+                
+                <div class="stat-item">
+                    <div class="stat-number">95%</div>
+                    <div class="stat-label">Speed Improvement</div>
+                </div>
+            </section>
+
+            <!-- Features Section -->
+            <section class="features">
+                <div class="feature-card">
+                    <div class="feature-icon">🏠</div>
+                    <h3>Interactive Learning</h3>
+                    <p>Learn through interactive examples and step-by-step demonstrations that make complex calculations simple and intuitive.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📚</div>
+                    <h3>Comprehensive Lessons</h3>
+                    <p>Master all 16 Vedic Math sutras with detailed explanations, examples, and practical applications in daily life.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🏆</div>
+                    <h3>Engaging Challenges</h3>
+                    <p>Test your skills with progressively challenging problems and compete with learners worldwide on our leaderboards.</p>
+                </div>
+            </section>
+
+            <!-- Lessons Preview -->
+            <section id="lessons" class="lessons-preview">
+                <h2>Featured Lessons</h2>
+                <div class="lesson-grid">
+                    <div class="lesson-item">
+                        <div class="lesson-number">Lesson 1</div>
+                        <div class="lesson-title">Ekadhikena Purvena</div>
+                        <div class="lesson-description">By one more than the previous one - Learn the fundamental sutra for quick calculations</div>
+                    </div>
+                    <div class="lesson-item">
+                        <div class="lesson-number">Lesson 2</div>
+                        <div class="lesson-title">Nikhilam Navatashcaramam</div>
+                        <div class="lesson-description">All from 9 and the last from 10 - Master subtraction and multiplication shortcuts</div>
+                    </div>
+                    <div class="lesson-item">
+                        <div class="lesson-number">Lesson 3</div>
+                        <div class="lesson-title">Urdhva-Tiryagbyham</div>
+                        <div class="lesson-description">Vertically and crosswise - The most versatile multiplication technique</div>
+                    </div>
+                    <div class="lesson-item">
+                        <div class="lesson-number">Lesson 4</div>
+                        <div class="lesson-title">Paravartya Yojayet</div>
+                        <div class="lesson-description">Transpose and adjust - Advanced division and fraction techniques</div>
+                    </div>
+                    <div class="lesson-item">
+                        <div class="lesson-number">Lesson 5</div>
+                        <div class="lesson-title">Shunyam Saamyasamuccaye</div>
+                        <div class="lesson-description">When the sum is the same, that sum is zero - Algebraic problem solving</div>
+                    </div>
+                    <div class="lesson-item">
+                        <div class="lesson-number">Lesson 6</div>
+                        <div class="lesson-title">Anurupye Shunyamanyat</div>
+                        <div class="lesson-description">If one is in ratio, the other is zero - Proportional calculations</div>
+                    </div>
+                    <div class="lesson-item">
+                        <div class="lesson-number">Lesson 7</div>
+                        <div class="lesson-title">Sankalana-Vyavakalanabhyam</div>
+                        <div class="lesson-description">By addition and by subtraction - Solve complex equations with ease</div>
+                    </div>
+                    <div class="lesson-item">
+                        <div class="lesson-number">Lesson 8</div>
+                        <div class="lesson-title">Puranapuranabhyam</div>
+                        <div class="lesson-description">By the completion or non-completion - Advanced multiplication techniques</div>
+                    </div>
+                   
+                </div>
+            </section>
+
+            <!-- Challenges Section -->
+            <section id="challenges" class="features">
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3>Speed Challenges</h3>
+                    <p>Test your calculation speed with timed challenges. See how fast you can solve problems using Vedic techniques!</p>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script>
+        // Sidebar functionality
+        const sidebar = document.getElementById('sidebar');
+        const sidebarOverlay = document.getElementById('sidebarOverlay');
+        const profileNav = document.getElementById('profile-nav');
+        const sidebarClose = document.getElementById('sidebarClose');
+
+        // Open sidebar when profile nav is clicked
+        profileNav.addEventListener('click', function(e) {
+            e.preventDefault();
+            sidebar.classList.add('open');
+            sidebarOverlay.classList.add('show');
+            
+            // Update nav active state
+            document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+            this.classList.add('active');
+        });
+
+        // Close sidebar when close button is clicked
+        sidebarClose.addEventListener('click', function() {
+            sidebar.classList.remove('open');
+            sidebarOverlay.classList.remove('show');
+            
+            // Remove active state from profile nav
+            profileNav.classList.remove('active');
+            // Set home as active by default
+            document.querySelector('a[href="#home"]').classList.add('active');
+        });
+
+        // Close sidebar when overlay is clicked
+        sidebarOverlay.addEventListener('click', function() {
+            sidebar.classList.remove('open');
+            sidebarOverlay.classList.remove('show');
+            
+            // Remove active state from profile nav
+            profileNav.classList.remove('active');
+            // Set home as active by default
+            document.querySelector('a[href="#home"]').classList.add('active');
+        });
+
+        // Handle other navigation links (excluding profile)
+        document.querySelectorAll('.nav-link:not(#profile-nav)').forEach(link => {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                
+                // Close sidebar if open
+                sidebar.classList.remove('open');
+                sidebarOverlay.classList.remove('show');
+                
+                // Remove active class from all links
+                document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+                
+                // Add active class to clicked link
+                this.classList.add('active');
+                
+                // Smooth scroll to section
+                const targetId = this.getAttribute('href');
+                const targetSection = document.querySelector(targetId);
+                if (targetSection) {
+                    targetSection.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // CTA Button smooth scroll
+        document.querySelector('.cta-button').addEventListener('click', function(e) {
+            e.preventDefault();
+            
+            // Close sidebar if open
+            sidebar.classList.remove('open');
+            sidebarOverlay.classList.remove('show');
+            
+            document.querySelector('#lessons').scrollIntoView({
+                behavior: 'smooth',
+                block: 'start'
+            });
+            
+            // Update nav active state
+            document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+            document.querySelector('a[href="#lessons"]').classList.add('active');
+        });
+
+        // Lesson item interactions
+        document.querySelectorAll('.lesson-item').forEach(item => {
+            item.addEventListener('click', function() {
+                // Add a subtle animation feedback
+                this.style.transform = 'scale(0.98)';
+                setTimeout(() => {
+                    this.style.transform = 'translateY(-2px)';
+                }, 100);
+            });
+        });
+
+        // Add scroll effect for navbar
+        window.addEventListener('scroll', function() {
+            const navbar = document.querySelector('.navbar');
+            if (window.scrollY > 50) {
+                navbar.style.background = 'rgba(255, 255, 255, 0.98)';
+                navbar.style.boxShadow = '0 4px 25px rgba(0, 0, 0, 0.15)';
+            } else {
+                navbar.style.background = 'rgba(255, 255, 255, 0.95)';
+                navbar.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.1)';
+            }
+        });
+
+        // Close sidebar with Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && sidebar.classList.contains('open')) {
+                sidebar.classList.remove('open');
+                sidebarOverlay.classList.remove('show');
+                profileNav.classList.remove('active');
+                document.querySelector('a[href="#home"]').classList.add('active');
+            }
+        });
+    </script>
+</body>
+</html>
