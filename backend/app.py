@@ -87,6 +87,19 @@ class User(db.Model):
     def is_anonymous(self):
         return False
     
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'username': self.username,
+            'email': self.email,
+            'date_of_birth': self.date_of_birth.isoformat(),
+            'grade_qualification': self.grade_qualification,
+            'role': self.role.value,
+            'created_at': self.created_at.isoformat(),
+            'last_login': self.last_login.isoformat() if self.last_login else None,
+            'is_active': self.is_active
+        }
+    
 class DifficultyLevel(Enum):
     BEGINNER = "beginner"
     INTERMEDIATE = "intermediate"
@@ -111,6 +124,18 @@ class Unit(db.Model):
     difficulty = db.Column(db.Enum(DifficultyLevel), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     lessons = db.relationship('Lesson', backref='unit', lazy=True, order_by='Lesson.order_index')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'title': self.title,
+            'description': self.description,
+            'difficulty': self.difficulty.value if self.difficulty else None,
+            'order_index': self.order_index,
+            'color_theme': self.color_theme,
+            'estimated_duration': self.estimated_duration,
+            'lessons_count': len(self.lessons) if self.lessons else 0
+        }
 
 class VedicSutra(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -553,6 +578,97 @@ def logout(current_user):
 @app.route('/api/health', methods=['GET'])
 def health_check():
     return jsonify({'status': 'healthy', 'timestamp': datetime.utcnow().isoformat()})
+
+@app.route('/api/admin/lessons', methods=['GET', 'POST'])
+@admin_required
+def handle_lessons(current_user):
+    if request.method == 'GET':
+        lessons = Lesson.query.all()
+        return jsonify({'lessons': [lesson.to_dict() for lesson in lessons]})
+
+    data = request.get_json()
+    lesson = Lesson(
+        unit_id=data['unit_id'],
+        title=data['title'],
+        description=data.get('description'),
+        content_json=data.get('content'),
+        difficulty=data['difficulty'],
+        order_index=data['order'],
+        xp_reward=data.get('xp_reward', 50),
+        learning_objectives=data.get('learningObjectives', []),
+        vedic_sutras=data.get('vedicSutras', [])
+    )
+    db.session.add(lesson)
+    db.session.commit()
+    return jsonify({'message': 'Lesson created successfully', 'lesson': lesson.to_dict()}), 201
+
+@app.route('/api/admin/questions', methods=['GET', 'POST'])
+@admin_required
+def handle_questions(current_user):
+    if request.method == 'GET':
+        questions = Exercise.query.all()
+        return jsonify({'questions': [q.to_dict() for q in questions]})
+
+    data = request.get_json()
+    question = Exercise(
+        lesson_id=data['lesson_id'],
+        question=data['question'],
+        correct_answer=data['correct_answer'],
+        explanation=data.get('explanation'),
+        difficulty=DifficultyLevel(data['difficulty']),
+        question_type=data.get('question_type', 'multiple_choice'),
+        options="\n".join(data.get('options', [])),
+        xp_reward=data.get('xp_reward', 10)
+    )
+    db.session.add(question)
+    db.session.commit()
+    return jsonify({'message': 'Question created successfully', 'question': question.to_dict()}), 201
+
+@app.route('/api/admin/units', methods=['GET', 'POST'])
+@admin_required
+def handle_units(current_user):
+    if request.method == 'GET':
+        units = Unit.query.all()
+        return jsonify({'units': [unit.to_dict() for unit in units]})
+
+    data = request.get_json()
+    unit = Unit(
+        title=data['title'],
+        description=data.get('description'),
+        difficulty=DifficultyLevel(data['difficulty']),
+        order_index=data['order_index'],
+        color_theme=data.get('color_theme'),
+        estimated_duration=data.get('estimated_duration', 60)
+    )
+    db.session.add(unit)
+    db.session.commit()
+    return jsonify({'message': 'Unit created successfully', 'unit': unit.to_dict()}), 201
+
+@app.route('/api/admin/users/<int:user_id>/profile', methods=['GET'])
+@admin_required
+def view_user_profile(current_user, user_id):
+    user = User.query.get_or_404(user_id)
+    return jsonify({
+        'user': {
+            'id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'date_of_birth': user.date_of_birth.isoformat(),
+            'grade_qualification': user.grade_qualification,
+            'role': user.role.value,
+            'is_active': user.is_active,
+            'created_at': user.created_at.isoformat(),
+            'last_login': user.last_login.isoformat() if user.last_login else None,
+            'total_xp': user.total_xp,
+            'current_level': user.current_level,
+            'daily_streak': user.daily_streak,
+            'longest_streak': user.longest_streak,
+            'total_lessons_completed': user.total_lessons_completed,
+            'total_exercises_completed': user.total_exercises_completed,
+        }
+    })
+
+
 
 # Create tables
 with app.app_context():
