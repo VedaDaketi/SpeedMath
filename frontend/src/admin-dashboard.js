@@ -10,23 +10,29 @@ const AdminDashboard = () => {
   const [users, setUsers] = useState([]);
   const [lessons, setLessons] = useState([]);
   const [questions, setQuestions] = useState([]);
-  const [challenges, setChallenges] = useState([]);
+  const [quizzes, setQuizzes] = useState([]);
   const [units, setUnits] = useState([]); // ✅ Needed for Unit management and lesson modal
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalLessons: 0,
     totalQuestions: 0,
-    totalChallenges: 0,
+    totalQuizzes: 0,
     activeUsersToday: 0
   });
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
-
-  // ✅ Modal state variables
   const [showAddLessonModal, setShowAddLessonModal] = useState(false);
+  const [showAddQuizModal, setShowAddQuizModal] = useState(false);
+  const [showQuizModal, setShowQuizModal] = useState(false);
+  const [editQuizData, setEditQuizData] = useState(null);
   const [showAddQuestionModal, setShowAddQuestionModal] = useState(false);
+  const [showQuestionModal, setShowQuestionModal] = useState(false);
+  const [editQuestionData, setEditQuestionData] = useState(null);
   const [showAddUnitModal, setShowAddUnitModal] = useState(false);
+  const [showEditUnitModal, setShowEditUnitModal] = useState(false);
+  const [editUnitData, setEditUnitData] = useState(null);
+  const [viewUnitLessons, setViewUnitLessons] = useState(null);
   const [showProfile, setShowProfile] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
 
@@ -47,6 +53,33 @@ const AdminDashboard = () => {
 
     return response.json();
   };
+
+ const fetchData = async () => {
+    setLoading(true);
+    try {
+      const [statsData, usersData, lessonsData, questionsData, unitsData , quizzesData] = await Promise.all([
+        apiCall('/api/admin/stats'),
+        apiCall('/api/admin/users'),
+        apiCall('/api/admin/lessons'),
+        apiCall('/api/admin/questions'),
+        apiCall('/api/admin/units'),
+        apiCall('/api/admin/quizzes')
+      ]);
+
+      setStats(statsData);
+      setUsers(usersData.users || []);
+      setLessons(lessonsData.lessons || []);
+      setQuestions(questionsData.questions || []);
+      setUnits(unitsData.units || []);
+      setQuizzes(quizzesData.quizzes || []);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
   const toggleUserStatus = async (userId) => {
   try {
     await apiCall(`/api/admin/users/${userId}/toggle-status`, { method: 'POST' });
@@ -71,29 +104,7 @@ const changeUserRole = async (userId, currentRole) => {
   }
 };
 
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const [statsData, usersData, lessonsData, questionsData, unitsData] = await Promise.all([
-        apiCall('/api/admin/stats'),
-        apiCall('/api/admin/users'),
-        apiCall('/api/admin/lessons'),
-        apiCall('/api/admin/questions'),
-        apiCall('/api/admin/units') // ✅ assuming this is the endpoint for units
-      ]);
-
-      setStats(statsData);
-      setUsers(usersData.users || []);
-      setLessons(lessonsData.lessons || []);
-      setQuestions(questionsData.questions || []);
-      setUnits(unitsData.units || []);
-    } catch (error) {
-      console.error('Error fetching data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+ 
   useEffect(() => {
     fetchData();
   }, []);
@@ -119,7 +130,7 @@ const changeUserRole = async (userId, currentRole) => {
         <StatCard icon={Users} title="Total Users" value={stats.totalUsers} color="blue" />
         <StatCard icon={BookOpen} title="Total Lessons" value={stats.totalLessons} color="green" />
         <StatCard icon={HelpCircle} title="Total Questions" value={stats.totalQuestions} color="purple" />
-        <StatCard icon={Trophy} title="Total Challenges" value={stats.totalChallenges} color="orange" />
+        <StatCard icon={Trophy} title="Total Quizzes" value={stats.totalQuizzes} color="orange" />
         <StatCard icon={Activity} title="Active Today" value={stats.activeUsersToday} color="red" />
       </div>
 
@@ -172,7 +183,99 @@ const changeUserRole = async (userId, currentRole) => {
     </div>
   );
 
-  const LessonManagement = () => (
+const LessonManagement = () => {
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [selectedLesson, setSelectedLesson] = useState(null);
+  const [editFormData, setEditFormData] = useState({});
+
+  // View Lesson Handler
+  const handleViewLesson = (lesson) => {
+    setSelectedLesson(lesson);
+    setShowViewModal(true);
+  };
+
+  // Edit Lesson Handler
+  const handleEditLesson = (lesson) => {
+    setSelectedLesson(lesson);
+    setEditFormData({
+      title: lesson.title,
+      unit_id: lesson.unit_id,
+      description: lesson.description,
+      content: JSON.stringify(lesson.content_json, null, 2),
+      difficulty: lesson.difficulty,
+      order_index: lesson.order,
+      xp_reward: lesson.xp_reward,
+      learning_objectives: lesson.learning_objectives?.join(', ') || '',
+      vedic_sutras: lesson.vedic_sutras?.join(', ') || ''
+    });
+    setShowEditModal(true);
+  };
+
+  // Delete Lesson Handler
+  const handleDeleteLesson = (lesson) => {
+    setSelectedLesson(lesson);
+    setShowDeleteModal(true);
+  };
+
+  // Confirm Delete
+  const confirmDeleteLesson = async () => {
+    try {
+      await apiCall(`/api/admin/lessons/${selectedLesson.id}`, {
+        method: 'DELETE'
+      });
+      setShowDeleteModal(false);
+      setSelectedLesson(null);
+      fetchData(); // Refresh the lesson list
+    } catch (error) {
+      console.error('Failed to delete lesson:', error);
+      alert('Error: Failed to delete lesson');
+    }
+  };
+
+  // Unified function for adding and editing lessons
+  const handleSubmitLesson = async (e, isEdit = false) => {
+    e.preventDefault();
+    const form = e.target;
+
+    try {
+      const lessonData = {
+        title: form.title.value,
+        unit_id: parseInt(form.unit.value),
+        description: form.description.value,
+        content_json: JSON.parse(form.content.value),
+        difficulty: form.difficulty.value.toLowerCase(),
+        order_index: parseInt(form.order_index.value),
+        xp_reward: parseInt(form.xp_reward.value),
+        learning_objectives: form.learning_objectives.value.split(',').map(s => s.trim()).filter(s => s),
+        vedic_sutras: form.vedic_sutras.value.split(',').map(s => s.trim()).filter(s => s)
+      };
+
+      const url = isEdit ? `/api/admin/lessons/${selectedLesson.id}` : '/api/admin/lessons';
+      const method = isEdit ? 'PUT' : 'POST';
+
+      await apiCall(url, {
+        method: method,
+        body: JSON.stringify(lessonData)
+      });
+
+      // Close appropriate modal
+      if (isEdit) {
+        setShowEditModal(false);
+        setSelectedLesson(null);
+      } else {
+        setShowAddLessonModal(false);
+      }
+      
+      fetchData(); // Refresh the lesson list
+    } catch (error) {
+      console.error(`Failed to ${isEdit ? 'update' : 'add'} lesson:`, error);
+      alert(`Error: Invalid content JSON or missing fields`);
+    }
+  };
+
+  return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-gray-800">Lesson Management</h2>
@@ -238,13 +341,25 @@ const changeUserRole = async (userId, currentRole) => {
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{lesson.created_at}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div className="flex space-x-2">
-                      <button className="text-blue-600 hover:text-blue-900">
+                      <button 
+                        onClick={() => handleViewLesson(lesson)}
+                        className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-50"
+                        title="View Lesson"
+                      >
                         <Eye className="w-4 h-4" />
                       </button>
-                      <button className="text-indigo-600 hover:text-indigo-900">
+                      <button 
+                        onClick={() => handleEditLesson(lesson)}
+                        className="text-indigo-600 hover:text-indigo-900 p-1 rounded hover:bg-indigo-50"
+                        title="Edit Lesson"
+                      >
                         <Edit className="w-4 h-4" />
                       </button>
-                      <button className="text-red-600 hover:text-red-900">
+                      <button 
+                        onClick={() => handleDeleteLesson(lesson)}
+                        className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50"
+                        title="Delete Lesson"
+                      >
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
@@ -255,152 +370,219 @@ const changeUserRole = async (userId, currentRole) => {
           </table>
         </div>
       </div>
+
+      {/* View Lesson Modal */}
+      {showViewModal && (
+        <ViewLessonModal 
+          lesson={selectedLesson} 
+          onClose={() => {
+            setShowViewModal(false);
+            setSelectedLesson(null);
+          }} 
+        />
+      )}
+
+      {/* Edit Lesson Modal */}
+      {showEditModal && (
+        <LessonModal 
+          lesson={selectedLesson}
+          formData={editFormData}
+          isEdit={true}
+          onSubmit={(e) => handleSubmitLesson(e, true)}
+          onClose={() => {
+            setShowEditModal(false);
+            setSelectedLesson(null);
+          }}
+        />
+      )}
+
+      {/* Add Lesson Modal */}
+      {showAddLessonModal && (
+        <LessonModal 
+          isEdit={false}
+          onSubmit={(e) => handleSubmitLesson(e, false)}
+          onClose={() => setShowAddLessonModal(false)}
+        />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <DeleteConfirmationModal 
+          lesson={selectedLesson}
+          onConfirm={confirmDeleteLesson}
+          onCancel={() => {
+            setShowDeleteModal(false);
+            setSelectedLesson(null);
+          }}
+        />
+      )}
     </div>
   );
+};
 
-  const QuestionManagement = () => (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-gray-800">Question Management</h2>
-        <button onClick={() => setShowAddQuestionModal(true)} className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2">
-          <Plus className="w-4 h-4" />
-          <span>Add New Question</span>
-        </button>
-      </div>
-
-      <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-        <div className="p-6 border-b border-gray-200">
-          <div className="flex space-x-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <input
-                type="text"
-                placeholder="Search questions..."
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              />
-            </div>
-            <select className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500">
-              <option>All Types</option>
-              <option>Practice</option>
-              <option>Challenge</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Question</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Attempts</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Success Rate</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {questions.map((question) => (
-                <tr key={question.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4">
-                    <div className="text-sm font-medium text-gray-900">{question.question}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                      question.type === 'practice' ? 'bg-blue-100 text-blue-800' : 'bg-orange-100 text-orange-800'
-                    }`}>
-                      {question.type}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{question.attempts}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <div className="text-sm font-medium text-gray-900">{question.successRate}%</div>
-                      <div className="ml-2 w-16 bg-gray-200 rounded-full h-2">
-                        <div 
-                          className="bg-green-600 h-2 rounded-full" 
-                          style={{ width: `${question.successRate}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <div className="flex space-x-2">
-                      <button className="text-indigo-600 hover:text-indigo-900">
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      <button className="text-red-600 hover:text-red-900">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-// Add Lesson Modal
- const AddLessonModal = () => {
-  const handleAddLesson = async (e) => {
-    e.preventDefault();
-    const form = e.target;
-
-    try {
-      const lessonData = {
-        title: form.title.value,
-        unit_id: parseInt(form.unit.value),
-        description: form.description.value,
-        content: JSON.parse(form.content.value),
-        difficulty: form.difficulty.value.toLowerCase(),
-        order: parseInt(form.order_index.value),
-        xp_reward: parseInt(form.xp_reward.value),
-        learningObjectives: form.learning_objectives.value.split(',').map(s => s.trim()),
-        vedicSutras: form.vedic_sutras.value.split(',').map(s => s.trim())
-      };
-
-      await apiCall('/api/admin/lessons', {
-        method: 'POST',
-        body: JSON.stringify(lessonData)
-      });
-
-      setShowAddLessonModal(false);
-      fetchData();
-    } catch (error) {
-      console.error('Failed to add lesson:', error);
-      alert('Error: Invalid content JSON or missing fields');
-    }
+// View Lesson Modal Component
+const ViewLessonModal = ({ lesson, onClose }) => {
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
   };
 
   return (
-    <div className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 ${showAddLessonModal ? '' : 'hidden'}`}>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-xl p-6 w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-6">
-          <h3 className="text-xl font-bold text-gray-800">Add New Lesson</h3>
+          <h3 className="text-xl font-bold text-gray-800">View Lesson Details</h3>
           <button
-            onClick={() => setShowAddLessonModal(false)}
+            onClick={onClose}
             className="text-gray-400 hover:text-gray-600"
           >
             <Plus className="w-6 h-6 transform rotate-45" />
           </button>
         </div>
 
-        <form className="space-y-4" onSubmit={handleAddLesson}>
+        <div className="space-y-6">
+          {/* Basic Information */}
+          <div className="bg-gray-50 p-4 rounded-lg">
+            <h4 className="font-semibold text-gray-800 mb-3">Basic Information</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Title</label>
+                <p className="text-sm text-gray-900">{lesson.title}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Difficulty</label>
+                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                  lesson.difficulty === 'beginner' ? 'bg-green-100 text-green-800' :
+                  lesson.difficulty === 'intermediate' ? 'bg-yellow-100 text-yellow-800' :
+                  'bg-red-100 text-red-800'
+                }`}>
+                  {lesson.difficulty}
+                </span>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Order</label>
+                <p className="text-sm text-gray-900">{lesson.order}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">XP Reward</label>
+                <p className="text-sm text-gray-900">{lesson.xp_reward}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+            <p className="text-sm text-gray-900 bg-gray-50 p-3 rounded-lg">{lesson.description}</p>
+          </div>
+
+          {/* Learning Objectives */}
+          {lesson.learning_objectives && lesson.learning_objectives.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Learning Objectives</label>
+              <ul className="list-disc pl-5 space-y-1">
+                {lesson.learning_objectives.map((objective, index) => (
+                  <li key={index} className="text-sm text-gray-900">{objective}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Vedic Sutras */}
+          {lesson.vedic_sutras && lesson.vedic_sutras.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Vedic Sutras</label>
+              <div className="flex flex-wrap gap-2">
+                {lesson.vedic_sutras.map((sutra, index) => (
+                  <span key={index} className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-sm">
+                    {sutra}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Content Preview */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Content Structure</label>
+            <div className="bg-gray-50 p-3 rounded-lg">
+              <pre className="text-sm text-gray-900 whitespace-pre-wrap overflow-x-auto">
+                {JSON.stringify(lesson.content_json, null, 2)}
+              </pre>
+            </div>
+          </div>
+
+          {/* Metadata */}
+          <div className="bg-gray-50 p-4 rounded-lg">
+            <h4 className="font-semibold text-gray-800 mb-3">Metadata</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Created</label>
+                <p className="text-sm text-gray-900">{formatDate(lesson.created_at)}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Last Updated</label>
+                <p className="text-sm text-gray-900">{formatDate(lesson.updated_at)}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end pt-6">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Unified Lesson Modal Component (for both Add and Edit)
+const LessonModal = ({ lesson, formData, isEdit = false, onSubmit, onClose }) => {
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl p-6 w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-xl font-bold text-gray-800">
+            {isEdit ? 'Edit Lesson' : 'Add New Lesson'}
+          </h3>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600"
+          >
+            <Plus className="w-6 h-6 transform rotate-45" />
+          </button>
+        </div>
+
+        <form className="space-y-4" onSubmit={onSubmit}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Lesson Title</label>
               <input
                 name="title"
                 type="text"
+                defaultValue={isEdit ? formData?.title : ''}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 placeholder="Enter lesson title"
+                required
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Unit</label>
-              <select name="unit" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-                <option>Select Unit</option>
+              <select 
+                name="unit" 
+                defaultValue={isEdit ? formData?.unit_id : ''} 
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                required
+              >
+                <option value="">Select Unit</option>
                 {units.map(unit => (
                   <option key={unit.id} value={unit.id}>{unit.title}</option>
                 ))}
@@ -413,6 +595,7 @@ const changeUserRole = async (userId, currentRole) => {
             <textarea
               name="description"
               rows={3}
+              defaultValue={isEdit ? formData?.description : ''}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               placeholder="Enter lesson description"
             />
@@ -426,8 +609,9 @@ const changeUserRole = async (userId, currentRole) => {
             <textarea
               name="content"
               rows={6}
+              defaultValue={isEdit ? formData?.content : ''}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono text-sm"
-              placeholder={`{
+              placeholder={isEdit ? '' : `{
   "sections": [
     {
       "type": "introduction",
@@ -453,19 +637,26 @@ const changeUserRole = async (userId, currentRole) => {
   ],
   "resources": ["Resource 1", "Resource 2"]
 }`}
+              required
             />
-            <div className="mt-2 text-xs text-gray-600">
-              <p><strong>Tip:</strong> Use valid JSON format. Common structure includes sections with types like "introduction", "concept", "example", "practice", etc.</p>
-            </div>
+            {!isEdit && (
+              <div className="mt-2 text-xs text-gray-600">
+                <p><strong>Tip:</strong> Use valid JSON format. Common structure includes sections with types like "introduction", "concept", "example", "practice", etc.</p>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Difficulty</label>
-              <select name="difficulty" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-                <option>Beginner</option>
-                <option>Intermediate</option>
-                <option>Advanced</option>
+              <select 
+                name="difficulty" 
+                defaultValue={isEdit ? formData?.difficulty : 'beginner'} 
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="beginner">Beginner</option>
+                <option value="intermediate">Intermediate</option>
+                <option value="advanced">Advanced</option>
               </select>
             </div>
             <div>
@@ -473,8 +664,10 @@ const changeUserRole = async (userId, currentRole) => {
               <input
                 name="order_index"
                 type="number"
+                defaultValue={isEdit ? formData?.order_index : ''}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 placeholder="1"
+                required
               />
             </div>
             <div>
@@ -482,8 +675,10 @@ const changeUserRole = async (userId, currentRole) => {
               <input
                 name="xp_reward"
                 type="number"
+                defaultValue={isEdit ? formData?.xp_reward : '50'}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 placeholder="50"
+                required
               />
             </div>
           </div>
@@ -493,6 +688,7 @@ const changeUserRole = async (userId, currentRole) => {
             <input
               name="learning_objectives"
               type="text"
+              defaultValue={isEdit ? formData?.learning_objectives : ''}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               placeholder="Objective 1, Objective 2, Objective 3"
             />
@@ -503,6 +699,7 @@ const changeUserRole = async (userId, currentRole) => {
             <input
               name="vedic_sutras"
               type="text"
+              defaultValue={isEdit ? formData?.vedic_sutras : ''}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               placeholder="Sutra 1, Sutra 2"
             />
@@ -511,7 +708,7 @@ const changeUserRole = async (userId, currentRole) => {
           <div className="flex justify-end space-x-3 pt-4">
             <button
               type="button"
-              onClick={() => setShowAddLessonModal(false)}
+              onClick={onClose}
               className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
             >
               Cancel
@@ -520,7 +717,7 @@ const changeUserRole = async (userId, currentRole) => {
               type="submit"
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
             >
-              Create Lesson
+              {isEdit ? 'Update Lesson' : 'Create Lesson'}
             </button>
           </div>
         </form>
@@ -529,56 +726,480 @@ const changeUserRole = async (userId, currentRole) => {
   );
 };
 
-const AddQuestionModal = ({ lessons }) => {
-  const handleAddQuestion = async (e) => {
+// Delete Confirmation Modal Component
+const DeleteConfirmationModal = ({ lesson, onConfirm, onCancel }) => {
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
+        <div className="flex items-center mb-4">
+          <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+            <Trash2 className="w-5 h-5 text-red-600" />
+          </div>
+          <div className="ml-3">
+            <h3 className="text-lg font-medium text-gray-900">Delete Lesson</h3>
+          </div>
+        </div>
+        
+        <div className="mb-4">
+          <p className="text-sm text-gray-500">
+            Are you sure you want to delete "<strong>{lesson.title}</strong>"? This action cannot be undone.
+          </p>
+        </div>
+
+        <div className="flex justify-end space-x-3">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
+
+const QuestionManagement = () => (
+  <div className="space-y-6">
+    <div className="flex justify-between items-center">
+      <h2 className="text-2xl font-bold text-gray-800">Question Management</h2>
+      <div className="flex space-x-3">
+        <button onClick={() => setShowAddQuizModal(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2">
+          <Plus className="w-4 h-4" />
+          <span>Add New Quiz</span>
+        </button>
+        <button onClick={() => setShowAddQuestionModal(true)} className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2">
+          <Plus className="w-4 h-4" />
+          <span>Add New Question</span>
+        </button>
+      </div>
+    </div>
+
+    {/* Quiz Table */}
+    <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+      <div className="p-6 border-b border-gray-200">
+        <div className="flex justify-between items-center">
+          <h3 className="text-lg font-semibold text-gray-800">Quiz Management</h3>
+          <div className="flex space-x-4">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <input
+                type="text"
+                placeholder="Search quizzes..."
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quiz Title</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time Limit</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Max Attempts</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Passing Score</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">XP Reward</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {quizzes.map((quiz) => (
+              <tr key={quiz.id} className="hover:bg-gray-50">
+                <td className="px-6 py-4">
+                  <div className="text-sm font-medium text-gray-900">{quiz.title}</div>
+                </td>
+                <td className="px-6 py-4">
+                  <div className="text-sm text-gray-600">{quiz.description}</div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{quiz.time_limit} min</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{quiz.max_attempts}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{quiz.passing_score}%</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{quiz.xp_reward} XP</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+  <div className="flex space-x-2">
+    <button
+      className="text-indigo-600 hover:text-indigo-900"
+      onClick={() => {
+        setEditQuizData(quiz);
+        setShowQuizModal(true);
+      }}
+      title="Edit Quiz"
+    >
+      <Edit className="w-4 h-4" />
+    </button>
+    <button
+      className="text-red-600 hover:text-red-900"
+      onClick={async () => {
+        if (window.confirm('Delete this quiz?')) {
+          await apiCall(`/api/admin/quizzes/${quiz.id}`, { method: 'DELETE' });
+          fetchData();
+        }
+      }}
+      title="Delete Quiz"
+    >
+      <Trash2 className="w-4 h-4" />
+    </button>
+  </div>
+</td>
+
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {/* Quiz Questions Table */}
+    <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+      <div className="p-6 border-b border-gray-200">
+        <div className="flex justify-between items-center">
+          <h3 className="text-lg font-semibold text-gray-800">Quiz Questions</h3>
+          <div className="flex space-x-4">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <input
+                type="text"
+                placeholder="Search questions..."
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              />
+            </div>
+            <select className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500">
+              <option>All Quizzes</option>
+              {quizzes.map(quiz => (
+                <option key={quiz.id} value={quiz.id}>{quiz.title}</option>
+              ))}
+            </select>
+            <select className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500">
+              <option>All Types</option>
+              <option>Multiple Choice</option>
+              <option>True/False</option>
+              <option>Fill in the Blank</option>
+              <option>Numerical</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Question</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quiz</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Points</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {questions.map((question) => (
+              <tr key={question.id} className="hover:bg-gray-50">
+                <td className="px-6 py-4">
+                  <div className="text-sm font-medium text-gray-900">{question.question}</div>
+                </td>
+                <td className="px-6 py-4">
+                  <div className="text-sm text-gray-600">{question.quiz_title}</div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                    question.question_type === 'multiple_choice' ? 'bg-blue-100 text-blue-800' : 
+                    question.question_type === 'true_false' ? 'bg-green-100 text-green-800' :
+                    question.question_type === 'fill_blank' ? 'bg-yellow-100 text-yellow-800' :
+                    'bg-purple-100 text-purple-800'
+                  }`}>
+                    {question.question_type.replace('_', ' ')}
+                  </span>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{question.points}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{question.order_index}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                  <div className="flex space-x-2">
+                    <button
+                      className="text-blue-600 hover:text-blue-800"
+                      title="Edit"
+                      onClick={() => {
+                        setEditQuestionData(question);  // pre-fill modal
+                        setShowQuestionModal(true);
+                      }}
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
+
+    <button
+      className="text-red-600 hover:text-red-800"
+      title="Delete"
+      onClick={async () => {
+        if (window.confirm('Are you sure you want to delete this question?')) {
+          try {
+            await apiCall(`/api/admin/quiz-questions/${question.id}`, {
+              method: 'DELETE'
+            });
+            fetchData();
+            alert('Question deleted.');
+          } catch (err) {
+            console.error('Delete failed:', err);
+            alert('Failed to delete question.');
+          }
+        }
+      }}
+    >
+      <Trash2 className="w-4 h-4" />
+    </button>
+  </div>
+</td>
+
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+);
+
+const AddEditQuizModal = ({
+  isEdit = false,
+  initialData = {},
+  lessons = [],
+  setShowModal,
+  fetchData
+}) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const form = e.target;
-
-    const questionData = {
-      lesson_id: parseInt(form.lesson_id.value),
-      question: form.question.value,
-      question_type: form.question_type.value,
-      correct_answer: form.correct_answer.value,
-      explanation: form.explanation.value,
-      difficulty: 'BEGINNER', // Or add dropdown if needed
-      options: form.options.value.split('\n'),
-      xp_reward: parseInt(form.points.value)
+    const quizData = {
+      lesson_id: form.lesson_id.value ? parseInt(form.lesson_id.value) : null,
+      title: form.title.value,
+      description: form.description.value,
+      time_limit: parseInt(form.time_limit.value),
+      max_attempts: parseInt(form.max_attempts.value) || 3,
+      passing_score: parseInt(form.passing_score.value) || 70,
+      xp_reward: parseInt(form.xp_reward.value) || 100
     };
 
     try {
-      await apiCall('/api/admin/questions', {
-        method: 'POST',
-        body: JSON.stringify(questionData)
+      const endpoint = isEdit
+        ? `/api/admin/quizzes/${initialData.id}`
+        : `/api/admin/quizzes`;
+      const method = isEdit ? 'PUT' : 'POST';
+
+      const result = await apiCall(endpoint, {
+        method,
+        body: JSON.stringify(quizData)
       });
-      setShowAddQuestionModal(false);
+
+      alert(`Quiz ${isEdit ? 'updated' : 'created'} successfully!`);
+      setShowModal(false);
       fetchData();
-      alert('Question added successfully!');
     } catch (error) {
-      console.error('Error adding question:', error);
-      alert('Failed to add question. Please check your input.');
+      console.error('Error submitting quiz:', error);
+      alert(error.message || 'Failed to submit quiz. Please check your input.');
     }
   };
 
   return (
-    <div className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 ${showAddQuestionModal ? '' : 'hidden'}`}>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-6">
-          <h3 className="text-xl font-bold text-gray-800">Add New Question</h3>
-          <button 
-            onClick={() => setShowAddQuestionModal(false)}
+          <h3 className="text-xl font-bold text-gray-800">
+            {isEdit ? 'Edit Quiz' : 'Add New Quiz'}
+          </h3>
+          <button
+            onClick={() => setShowModal(false)}
             className="text-gray-400 hover:text-gray-600"
           >
             <Plus className="w-6 h-6 transform rotate-45" />
           </button>
         </div>
-        
-        <form className="space-y-4" onSubmit={handleAddQuestion}>
+
+        <form className="space-y-4" onSubmit={handleSubmit}>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Quiz Title</label>
+            <input
+              name="title"
+              type="text"
+              defaultValue={initialData.title || ''}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="Enter quiz title"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+            <textarea
+              name="description"
+              rows={3}
+              defaultValue={initialData.description || ''}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="Enter quiz description"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Associate with Lesson (Optional)</label>
+            <select
+              name="lesson_id"
+              defaultValue={initialData.lesson_id || ''}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">No lesson association</option>
+              {lessons.map((lesson) => (
+                <option key={lesson.id} value={lesson.id}>{lesson.title}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Time Limit (minutes)</label>
+              <input
+                name="time_limit"
+                type="number"
+                min="1"
+                defaultValue={initialData.time_limit || ''}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="30"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Max Attempts</label>
+              <input
+                name="max_attempts"
+                type="number"
+                min="1"
+                defaultValue={initialData.max_attempts || 3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="3"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Passing Score (%)</label>
+              <input
+                name="passing_score"
+                type="number"
+                min="1"
+                max="100"
+                defaultValue={initialData.passing_score || 70}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="70"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">XP Reward</label>
+              <input
+                name="xp_reward"
+                type="number"
+                min="1"
+                defaultValue={initialData.xp_reward || 100}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="100"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end space-x-3 pt-4">
+            <button
+              type="button"
+              onClick={() => setShowModal(false)}
+              className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              {isEdit ? 'Update Quiz' : 'Create Quiz'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+
+const AddEditQuestionModal = ({
+  isEdit = false,
+  initialData = {},
+  lessons = [],
+  quizzes = [],
+  setShowModal,
+  fetchData
+}) => {
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const form = e.target;
+
+    const questionData = {
+      quiz_id: parseInt(form.quiz_id.value),
+      question: form.question.value,
+      question_type: form.question_type.value,
+      correct_answer: form.correct_answer.value,
+      explanation: form.explanation.value,
+      options: form.options.value
+        ? form.options.value.split('\n').filter(opt => opt.trim())
+        : [],
+      points: parseInt(form.points.value) || 10,
+      order_index: parseInt(form.order_index.value) || 1
+    };
+
+    try {
+      const endpoint = isEdit
+        ? `/api/admin/quiz-questions/${initialData.id}`
+        : '/api/admin/quiz-questions';
+      const method = isEdit ? 'PUT' : 'POST';
+
+      await apiCall(endpoint, {
+        method,
+        body: JSON.stringify(questionData)
+      });
+
+      alert(`Question ${isEdit ? 'updated' : 'added'} successfully!`);
+      setShowModal(false);
+      fetchData();
+    } catch (error) {
+      console.error('Error saving question:', error);
+      alert('Failed to save question. Please check your input.');
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-xl font-bold text-gray-800">
+            {isEdit ? 'Edit Question' : 'Add New Question'}
+          </h3>
+          <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
+            <Plus className="w-6 h-6 transform rotate-45" />
+          </button>
+        </div>
+
+        <form className="space-y-4" onSubmit={handleSubmit}>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Select Lesson</label>
             <select
               name="lesson_id"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
               required
+              defaultValue={initialData.lesson_id || ''}
             >
               <option value="">Select a lesson</option>
               {lessons.map(lesson => (
@@ -587,24 +1208,57 @@ const AddQuestionModal = ({ lessons }) => {
             </select>
           </div>
 
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Select Quiz</label>
+              <select
+                name="quiz_id"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                required
+                defaultValue={initialData.quiz_id || ''}
+              >
+                <option value="">Select a quiz</option>
+                {quizzes.map(quiz => (
+                  <option key={quiz.id} value={quiz.id}>{quiz.title}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Order Index</label>
+              <input
+                name="order_index"
+                type="number"
+                min="1"
+                defaultValue={initialData.order_index || 1}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                required
+              />
+            </div>
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Question</label>
             <textarea
               name="question"
               rows={3}
+              defaultValue={initialData.question || ''}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-              placeholder="Enter your question"
+              required
             />
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Question Type</label>
-              <select name="question_type" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500">
-                <option>Multiple Choice</option>
-                <option>True/False</option>
-                <option>Fill in the Blank</option>
-                <option>Numerical</option>
+              <select
+                name="question_type"
+                defaultValue={initialData.question_type || 'multiple_choice'}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+              >
+                <option value="multiple_choice">Multiple Choice</option>
+                <option value="true_false">True/False</option>
+                <option value="fill_blank">Fill in the Blank</option>
+                <option value="numerical">Numerical</option>
               </select>
             </div>
             <div>
@@ -612,46 +1266,50 @@ const AddQuestionModal = ({ lessons }) => {
               <input
                 name="points"
                 type="number"
+                min="1"
+                defaultValue={initialData.points || 10}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                placeholder="10"
               />
             </div>
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Options (one per line)</label>
             <textarea
               name="options"
               rows={4}
+              defaultValue={initialData.options ? initialData.options.join('\n') : ''}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-              placeholder="Option 1&#10;Option 2&#10;Option 3&#10;Option 4"
+              placeholder="Option 1&#10;Option 2&#10;Option 3"
             />
+            <p className="text-xs text-gray-500 mt-1">Leave empty for non-multiple choice questions</p>
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Correct Answer</label>
             <input
               name="correct_answer"
               type="text"
+              defaultValue={initialData.correct_answer || ''}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-              placeholder="Enter correct answer"
+              required
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Explanation</label>
             <textarea
               name="explanation"
               rows={3}
+              defaultValue={initialData.explanation || ''}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-              placeholder="Explain why this is the correct answer"
             />
           </div>
-          
+
           <div className="flex justify-end space-x-3 pt-4">
             <button
               type="button"
-              onClick={() => setShowAddQuestionModal(false)}
+              onClick={() => setShowModal(false)}
               className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
             >
               Cancel
@@ -660,7 +1318,7 @@ const AddQuestionModal = ({ lessons }) => {
               type="submit"
               className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
             >
-              Create Question
+              {isEdit ? 'Update Question' : 'Create Question'}
             </button>
           </div>
         </form>
@@ -670,135 +1328,7 @@ const AddQuestionModal = ({ lessons }) => {
 };
 
 
-  // Add Unit Modal
- const AddUnitModal = () => {
-  const handleAddUnit = async (e) => {
-    e.preventDefault();
-    const form = e.target;
-
-    const unitData = {
-      title: form.title.value,
-      description: form.description.value,
-      order_index: parseInt(form.order_index.value),
-      difficulty: form.difficulty.value.toUpperCase(),
-      color_theme: form.color_theme.value,
-      estimated_duration: parseInt(form.estimated_duration.value)
-    };
-
-    try {
-      await apiCall('/api/admin/units', {
-        method: 'POST',
-        body: JSON.stringify(unitData)
-      });
-      setShowAddUnitModal(false);
-      fetchData();
-      alert('Unit added successfully!');
-    } catch (err) {
-      console.error('Error adding unit:', err);
-      alert('Failed to add unit. Check your input.');
-    }
-  };
-
-  return (
-    <div className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 ${showAddUnitModal ? '' : 'hidden'}`}>
-      <div className="bg-white rounded-xl p-6 w-full max-w-xl mx-4">
-        <div className="flex justify-between items-center mb-6">
-          <h3 className="text-xl font-bold text-gray-800">Add New Unit</h3>
-          <button 
-            onClick={() => setShowAddUnitModal(false)}
-            className="text-gray-400 hover:text-gray-600"
-          >
-            <Plus className="w-6 h-6 transform rotate-45" />
-          </button>
-        </div>
-        
-        <form className="space-y-4" onSubmit={handleAddUnit}>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Unit Title</label>
-            <input
-              name="title"
-              type="text"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
-              placeholder="Enter unit title"
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-            <textarea
-              name="description"
-              rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
-              placeholder="Enter unit description"
-            />
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Difficulty</label>
-              <select name="difficulty" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500">
-                <option>Beginner</option>
-                <option>Intermediate</option>
-                <option>Advanced</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Order Index</label>
-              <input
-                name="order_index"
-                type="number"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
-                placeholder="1"
-              />
-            </div>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Color Theme</label>
-              <select name="color_theme" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500">
-                <option value="blue">Blue</option>
-                <option value="green">Green</option>
-                <option value="purple">Purple</option>
-                <option value="orange">Orange</option>
-                <option value="red">Red</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Est. Duration (min)</label>
-              <input
-                name="estimated_duration"
-                type="number"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
-                placeholder="60"
-              />
-            </div>
-          </div>
-          
-          <div className="flex justify-end space-x-3 pt-4">
-            <button
-              type="button"
-              onClick={() => setShowAddUnitModal(false)}
-              className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
-            >
-              Create Unit
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-};
-
-
-  // Unit Management Component
-  const UnitManagement = () => (
+ const UnitManagement = () => (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-gray-800">Unit Management</h2>
@@ -819,18 +1349,21 @@ const AddQuestionModal = ({ lessons }) => {
                 <BookOpen className={`w-6 h-6 text-${unit.color_theme}-600`} />
               </div>
               <div className="flex space-x-2">
-                <button className="text-indigo-600 hover:text-indigo-900">
+                <button onClick={() => { setEditUnitData(unit); setShowEditUnitModal(true); }} className="text-indigo-600 hover:text-indigo-900">
                   <Edit className="w-4 h-4" />
                 </button>
-                <button className="text-red-600 hover:text-red-900">
+                <button onClick={async () => {
+                  if (window.confirm('Delete this unit?')) {
+                    await apiCall(`/api/admin/units/${unit.id}`, { method: 'DELETE' });
+                    fetchData();
+                  }
+                }} className="text-red-600 hover:text-red-900">
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
             </div>
-            
             <h3 className="text-lg font-bold text-gray-900 mb-2">{unit.title}</h3>
             <p className="text-gray-600 text-sm mb-4">{unit.description}</p>
-            
             <div className="flex items-center justify-between mb-4">
               <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                 unit.difficulty === 'beginner' ? 'bg-green-100 text-green-800' :
@@ -841,11 +1374,13 @@ const AddQuestionModal = ({ lessons }) => {
               </span>
               <span className="text-sm text-gray-500">{unit.lessons_count} lessons</span>
             </div>
-            
             <div className="border-t border-gray-200 pt-4">
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600">Order: {unit.order_index}</span>
-                <button className="text-blue-600 hover:text-blue-800 text-sm font-medium">
+                <button onClick={async () => {
+                  const res = await apiCall(`/api/admin/units/${unit.id}/lessons`);
+                  setViewUnitLessons({ unit, lessons: res.lessons });
+                }} className="text-blue-600 hover:text-blue-800 text-sm font-medium">
                   View Lessons
                 </button>
               </div>
@@ -859,6 +1394,172 @@ const AddQuestionModal = ({ lessons }) => {
     setSelectedUser(user);
     setShowProfile(true);
   };
+
+  // Add Unit Modal
+ const AddEditUnitModal = ({ isEdit = false, initialData = {}, onClose }) => {
+    const handleSubmit = async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const unitData = {
+        title: form.title.value,
+        description: form.description.value,
+        order_index: parseInt(form.order_index.value),
+        difficulty: form.difficulty.value.toUpperCase(),
+        color_theme: form.color_theme.value,
+        estimated_duration: parseInt(form.estimated_duration.value),
+      };
+      const endpoint = isEdit ? `/api/admin/units/${initialData.id}` : '/api/admin/units';
+      await apiCall(endpoint, {
+        method: isEdit ? 'PUT' : 'POST',
+        body: JSON.stringify(unitData)
+      });
+      onClose();
+      fetchData();
+    };
+    return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl p-6 w-full max-w-xl mx-4">
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-xl font-bold text-gray-800">
+            {isEdit ? 'Edit Unit' : 'Add New Unit'}
+          </h3>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600"
+          >
+            <Plus className="w-6 h-6 transform rotate-45" />
+          </button>
+        </div>
+
+        <form className="space-y-4" onSubmit={handleSubmit}>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Unit Title</label>
+            <input
+              name="title"
+              type="text"
+              defaultValue={initialData.title || ''}
+              required
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+              placeholder="Enter unit title"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+            <textarea
+              name="description"
+              rows={3}
+              defaultValue={initialData.description || ''}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+              placeholder="Enter unit description"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Difficulty</label>
+              <select
+                name="difficulty"
+                defaultValue={initialData.difficulty || 'BEGINNER'}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+              >
+                <option>Beginner</option>
+                <option>Intermediate</option>
+                <option>Advanced</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Order Index</label>
+              <input
+                name="order_index"
+                type="number"
+                defaultValue={initialData.order_index || ''}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                placeholder="1"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Color Theme</label>
+              <select
+                name="color_theme"
+                defaultValue={initialData.color_theme || 'blue'}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+              >
+                <option value="blue">Blue</option>
+                <option value="green">Green</option>
+                <option value="purple">Purple</option>
+                <option value="orange">Orange</option>
+                <option value="red">Red</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Est. Duration (min)</label>
+              <input
+                name="estimated_duration"
+                type="number"
+                defaultValue={initialData.estimated_duration || ''}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                placeholder="60"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end space-x-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
+            >
+              {isEdit ? 'Save Changes' : 'Create Unit'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+
+  const ViewUnitLessonsModal = () => (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-bold text-gray-800">
+            Lessons in Unit: {viewUnitLessons.unit.title}
+          </h3>
+          <button onClick={() => setViewUnitLessons(null)} className="text-gray-500 hover:text-gray-700">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <ul className="divide-y divide-gray-200">
+          {viewUnitLessons.lessons.map((lesson) => (
+            <li key={lesson.id} className="py-2 flex justify-between items-center">
+              <span className="text-gray-800">{lesson.title}</span>
+              <button onClick={async () => {
+                await apiCall(`/api/admin/units/${viewUnitLessons.unit.id}/lessons/${lesson.id}/unlink`, { method: 'POST' });
+                const res = await apiCall(`/api/admin/units/${viewUnitLessons.unit.id}/lessons`);
+                setViewUnitLessons({ ...viewUnitLessons, lessons: res.lessons });
+              }} className="text-red-600 hover:text-red-800">
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+
+  // Unit Management Component
+ 
 
   const UserManagement = () => (
     <div className="space-y-6">
@@ -1282,12 +1983,28 @@ const AddQuestionModal = ({ lessons }) => {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {renderContent()}
-        <AddLessonModal />
-        <AddQuestionModal 
-        showAddQuestionModal={showAddQuestionModal}
-        setShowAddQuestionModal={setShowAddQuestionModal}
-        lessons={lessons} />
-        <AddUnitModal />
+        {showQuestionModal && (
+        <AddEditQuestionModal
+          isEdit={!!editQuestionData}
+          initialData={editQuestionData || {}}
+          lessons={lessons}
+          quizzes={quizzes}
+          setShowModal={setShowQuestionModal}
+          fetchData={fetchData} /> )}
+
+        {showQuizModal && (
+  <AddEditQuizModal
+    isEdit={!!editQuizData}
+    initialData={editQuizData || {}}
+    lessons={lessons}
+    setShowModal={setShowQuizModal}
+    fetchData={fetchData}
+  />
+)}
+
+        {showAddUnitModal && <AddEditUnitModal onClose={() => setShowAddUnitModal(false)} />}
+      {showEditUnitModal && editUnitData && <AddEditUnitModal isEdit initialData={editUnitData} onClose={() => setShowEditUnitModal(false)} />}
+      {viewUnitLessons && <ViewUnitLessonsModal />}
         <ViewProfile 
       isOpen={showProfile} 
       onClose={() => setShowProfile(false)} 

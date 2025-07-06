@@ -123,7 +123,7 @@ class Unit(db.Model):
     estimated_duration = db.Column(db.Integer)
     difficulty = db.Column(db.Enum(DifficultyLevel), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    lessons = db.relationship('Lesson', backref='unit', lazy=True, order_by='Lesson.order_index')
+    lessons = db.relationship('Lesson', backref='unit', lazy=True, passive_deletes=True, order_by='Lesson.order_index')
 
     def to_dict(self):
         return {
@@ -149,7 +149,7 @@ class VedicSutra(db.Model):
 
 class Lesson(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    unit_id = db.Column(db.Integer, db.ForeignKey('unit.id'), nullable=False)
+    unit_id = db.Column(db.Integer, db.ForeignKey('unit.id' , ondelete='SET NULL'), nullable=True)
     title = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
     content_json = db.Column(db.JSON, nullable=False)
@@ -164,10 +164,10 @@ class Lesson(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     is_published = db.Column(db.Boolean, default=True)
-    exercises = db.relationship('Exercise', backref='lesson', lazy=True)
-    sutras = db.relationship('LessonSutra', backref='lesson', lazy=True)
-    quizzes = db.relationship('Quiz', backref='lesson', lazy=True)
-
+    exercises = db.relationship('Exercise', backref='lesson', lazy=True , passive_deletes=True)
+    sutras = db.relationship('LessonSutra', backref='lesson', lazy=True , passive_deletes=True)
+    quizzes = db.relationship('Quiz', backref='lesson', lazy=True , passive_deletes=True)
+    progress = db.relationship('UserProgress', backref='lesson', lazy=True, passive_deletes=True)
     def to_dict(self):
         return {
             'id': self.id,
@@ -190,13 +190,15 @@ class Lesson(db.Model):
 
 class LessonSutra(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    lesson_id = db.Column(db.Integer, db.ForeignKey('lesson.id'), nullable=False)
+    lesson_id = db.Column(db.Integer, db.ForeignKey('lesson.id', ondelete='SET NULL'), nullable=True)
+
     sutra_id = db.Column(db.Integer, db.ForeignKey('vedic_sutra.id'), nullable=False)
     is_primary = db.Column(db.Boolean, default=False)
 
 class Exercise(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    lesson_id = db.Column(db.Integer, db.ForeignKey('lesson.id'), nullable=False)
+    lesson_id = db.Column(db.Integer, db.ForeignKey('lesson.id', ondelete='SET NULL'), nullable=True)
+
     question = db.Column(db.Text, nullable=False)
     correct_answer = db.Column(db.String(100), nullable=False)
     explanation = db.Column(db.Text)
@@ -212,7 +214,8 @@ class Exercise(db.Model):
 
 class Quiz(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    lesson_id = db.Column(db.Integer, db.ForeignKey('lesson.id'), nullable=False)
+    lesson_id = db.Column(db.Integer, db.ForeignKey('lesson.id', ondelete='SET NULL'), nullable=True)
+
     title = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
     time_limit = db.Column(db.Integer, nullable=False)
@@ -247,7 +250,8 @@ class QuizAttempt(db.Model):
 class UserProgress(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    lesson_id = db.Column(db.Integer, db.ForeignKey('lesson.id'), nullable=False)
+    lesson_id = db.Column(db.Integer, db.ForeignKey('lesson.id', ondelete='SET NULL'), nullable=True)
+
     completed = db.Column(db.Boolean, default=False)
     completion_date = db.Column(db.DateTime)
     score = db.Column(db.Integer)
@@ -606,43 +610,195 @@ def handle_lessons(current_user):
         lessons = Lesson.query.all()
         return jsonify({'lessons': [lesson.to_dict() for lesson in lessons]})
 
-    data = request.get_json()
-    lesson = Lesson(
-        unit_id=data['unit_id'],
-        title=data['title'],
-        description=data.get('description'),
-        content_json=data.get('content'),
-        difficulty=data['difficulty'],
-        order_index=data['order'],
-        xp_reward=data.get('xp_reward', 50),
-        learning_objectives=data.get('learningObjectives', []),
-        vedic_sutras=data.get('vedicSutras', [])
-    )
-    db.session.add(lesson)
-    db.session.commit()
-    return jsonify({'message': 'Lesson created successfully', 'lesson': lesson.to_dict()}), 201
-
-@app.route('/api/admin/questions', methods=['GET', 'POST'])
+    elif request.method == 'POST':
+        data = request.get_json()
+        try:
+            new_lesson = Lesson(
+                unit_id=data.get('unit_id'),
+                title=data['title'],
+                description=data.get('description'),
+                content_json=data['content_json'],
+                difficulty=data['difficulty'],
+                order_index=data['order_index'],
+                xp_reward=data.get('xp_reward', 50),
+                learning_objectives=data.get('learning_objectives', []),
+                vedic_sutras=data.get('vedic_sutras', [])
+            )
+            db.session.add(new_lesson)
+            db.session.commit()
+            return jsonify({'message': 'Lesson created successfully', 'lesson': new_lesson.to_dict()}), 201
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'error': str(e)}), 400
+@app.route('/api/admin/lessons/<int:lesson_id>', methods=['PUT', 'DELETE'])
 @admin_required
-def handle_questions(current_user):
-    if request.method == 'GET':
-        questions = Exercise.query.all()
-        return jsonify({'questions': [q.to_dict() for q in questions]})
+def update_delete_lesson(current_user, lesson_id):
+    lesson = Lesson.query.get_or_404(lesson_id)
 
-    data = request.get_json()
-    question = Exercise(
-        lesson_id=data['lesson_id'],
-        question=data['question'],
-        correct_answer=data['correct_answer'],
-        explanation=data.get('explanation'),
-        difficulty=DifficultyLevel(data['difficulty'].lower()),
-        question_type=data.get('question_type', 'multiple_choice'),
-        options="\n".join(data.get('options', [])),
-        xp_reward=data.get('xp_reward', 10)
-    )
-    db.session.add(question)
-    db.session.commit()
-    return jsonify({'message': 'Question created successfully', 'question': question.to_dict()}), 201
+    if request.method == 'PUT':
+        data = request.get_json()
+        try:
+            lesson.title = data['title']
+            lesson.unit_id = data.get('unit_id')
+            lesson.description = data.get('description')
+            lesson.content_json = data['content_json']
+            lesson.difficulty = data['difficulty']
+            lesson.order_index = data['order_index']
+            lesson.xp_reward = data.get('xp_reward', 50)
+            lesson.learning_objectives = data.get('learning_objectives', [])
+            lesson.vedic_sutras = data.get('vedic_sutras', [])
+            db.session.commit()
+            return jsonify({'message': 'Lesson updated successfully', 'lesson': lesson.to_dict()})
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'error': str(e)}), 400
+
+    elif request.method == 'DELETE':
+        try:
+            db.session.delete(lesson)
+            db.session.commit()
+            return jsonify({'message': 'Lesson deleted successfully'})
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'error': str(e)}), 400
+
+@app.route('/api/admin/quizzes', methods=['GET' , 'POST'])
+@admin_required
+def handle_quizzes(current_user):
+    if request.method == 'GET':
+        quizzes = Quiz.query.all()
+        return jsonify({
+            'quizzes': [{
+                'id': quiz.id,
+                'title': quiz.title,
+                'description': quiz.description,
+                'time_limit': quiz.time_limit,
+                'max_attempts': quiz.max_attempts,
+                'passing_score': quiz.passing_score,
+                'xp_reward': quiz.xp_reward,
+                'lesson_id': quiz.lesson_id
+            } for quiz in quizzes]
+        })
+    try:
+        data = request.get_json()
+        quiz = Quiz(
+            lesson_id=data.get("lesson_id"),
+            title=data["title"],
+            description=data.get("description"),
+            time_limit=data["time_limit"],
+            max_attempts=data.get("max_attempts", 3),
+            passing_score=data.get("passing_score", 70),
+            xp_reward=data.get("xp_reward", 100)
+        )
+        db.session.add(quiz)
+        db.session.commit()
+        return jsonify({"message": "Quiz created successfully", "quiz_id": quiz.id}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/admin/quizzes/<int:quiz_id>', methods=['PUT', 'DELETE'])
+@admin_required
+def update_delete_quiz(current_user, quiz_id):
+    quiz = Quiz.query.get_or_404(quiz_id)
+
+    if request.method == 'PUT':
+        try:
+            data = request.get_json()
+            quiz.title = data.get("title", quiz.title)
+            quiz.description = data.get("description", quiz.description)
+            quiz.time_limit = data.get("time_limit", quiz.time_limit)
+            quiz.max_attempts = data.get("max_attempts", quiz.max_attempts)
+            quiz.passing_score = data.get("passing_score", quiz.passing_score)
+            quiz.xp_reward = data.get("xp_reward", quiz.xp_reward)
+            quiz.lesson_id = data.get("lesson_id", quiz.lesson_id)
+            db.session.commit()
+            return jsonify({'message': 'Quiz updated successfully'})
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'error': str(e)}), 400
+
+    elif request.method == 'DELETE':
+        try:
+            db.session.delete(quiz)
+            db.session.commit()
+            return jsonify({'message': 'Quiz deleted successfully'})
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'error': str(e)}), 400
+ 
+
+@app.route('/api/admin/questions', methods=['GET'])
+@admin_required
+def get_all_questions(current_user):
+    questions = QuizQuestion.query.all()
+    return jsonify({
+        "questions": [{
+            "id": q.id,
+            "quiz_id": q.quiz_id,
+            "quiz_title": q.quiz.title if q.quiz else None,
+            "question": q.question,
+            "question_type": q.question_type,
+            "options": q.options,
+            "correct_answer": q.correct_answer,
+            "explanation": q.explanation,
+            "points": q.points,
+            "order_index": q.order_index
+        } for q in questions]
+    })
+
+@app.route('/api/admin/quiz-questions', methods=['POST'])
+@admin_required
+def create_question(current_user):
+    try:
+        data = request.get_json()
+        question = QuizQuestion(
+            quiz_id=data.get('quiz_id'),
+            question=data.get('question'),
+            question_type=data.get('question_type'),
+            correct_answer=data.get('correct_answer'),
+            explanation=data.get('explanation'),
+            options="\n".join(data.get('options', [])),
+            points=data.get('points', 10),
+            order_index=data.get('order_index', 1)
+        )
+        db.session.add(question)
+        db.session.commit()
+        return jsonify({"message": "Question created successfully"}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/quiz-questions/<int:question_id>', methods=['PUT'])
+@admin_required
+def update_question(current_user, question_id):
+    try:
+        question = QuizQuestion.query.get_or_404(question_id)
+        data = request.get_json()
+        question.question = data.get('question', question.question)
+        question.question_type = data.get('question_type', question.question_type)
+        question.correct_answer = data.get('correct_answer', question.correct_answer)
+        question.explanation = data.get('explanation', question.explanation)
+        question.options = "\n".join(data.get('options', question.options.split('\n')))
+        question.points = data.get('points', question.points)
+        question.order_index = data.get('order_index', question.order_index)
+        db.session.commit()
+        return jsonify({"message": "Question updated successfully"})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/quiz-questions/<int:question_id>', methods=['DELETE'])
+@admin_required
+def delete_question(current_user, question_id):
+    try:
+        question = QuizQuestion.query.get_or_404(question_id)
+        db.session.delete(question)
+        db.session.commit()
+        return jsonify({"message": "Question deleted successfully"})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/admin/units', methods=['GET', 'POST'])
 @admin_required
@@ -694,7 +850,7 @@ def get_admin_stats(current_user):
     total_users = User.query.count()
     total_lessons = Lesson.query.count()
     total_questions = Exercise.query.count()
-    total_challenges = DailyChallenge.query.count()
+    total_quizzes = Quiz.query.count()
 
     today = date.today()
     active_today = User.query.filter(User.last_login >= datetime(today.year, today.month, today.day)).count()
@@ -703,10 +859,49 @@ def get_admin_stats(current_user):
         'totalUsers': total_users,
         'totalLessons': total_lessons,
         'totalQuestions': total_questions,
-        'totalChallenges': total_challenges,
+        'totalQuizzes': total_quizzes,
         'activeUsersToday': active_today
     })
 
+@app.route('/api/admin/units/<int:unit_id>', methods=['PUT'])
+@admin_required
+def update_unit(current_user, unit_id):
+    unit = Unit.query.get_or_404(unit_id)
+    data = request.get_json()
+
+    unit.title = data.get('title', unit.title)
+    unit.description = data.get('description', unit.description)
+    unit.order_index = data.get('order_index', unit.order_index)
+    unit.difficulty = DifficultyLevel[data['difficulty'].upper()] if data.get('difficulty') else unit.difficulty
+    unit.color_theme = data.get('color_theme', unit.color_theme)
+    unit.estimated_duration = data.get('estimated_duration', unit.estimated_duration)
+
+    db.session.commit()
+    return jsonify({'message': 'Unit updated successfully', 'unit': unit.to_dict()})
+@app.route('/api/admin/units/<int:unit_id>', methods=['DELETE'])
+@admin_required
+def delete_unit(current_user, unit_id):
+    unit = Unit.query.get_or_404(unit_id)
+    db.session.delete(unit)
+    db.session.commit()
+    return jsonify({'message': 'Unit deleted successfully'})
+@app.route('/api/admin/units/<int:unit_id>/lessons', methods=['GET'])
+@admin_required
+def get_unit_lessons(current_user, unit_id):
+    unit = Unit.query.get_or_404(unit_id)
+    lessons = Lesson.query.filter_by(unit_id=unit.id).all()
+    return jsonify({'lessons': [l.to_dict() for l in lessons]})
+
+@app.route('/api/admin/units/<int:unit_id>/lessons/<int:lesson_id>/unlink', methods=['POST'])
+@admin_required
+def unlink_lesson_from_unit(current_user, unit_id, lesson_id):
+    lesson = Lesson.query.get_or_404(lesson_id)
+    if lesson.unit_id != unit_id:
+        return jsonify({'error': 'Lesson not linked to this unit'}), 400
+
+    lesson.unit_id = None
+    db.session.commit()
+    return jsonify({'message': 'Lesson unlinked from unit'})
 
 
 # Create tables
