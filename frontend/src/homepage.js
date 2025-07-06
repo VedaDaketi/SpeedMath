@@ -46,7 +46,8 @@ export default function Auth() {
           // Login successful - store token and redirect based on role
           // Note: localStorage is not available in Claude artifacts, but would work in a real app
           console.log('Login successful:', data);
-          
+          localStorage.setItem('token', data.token);
+          localStorage.setItem('username', data.user.username);
           // Redirect based on user role
           if (data.user && data.user.role === 'admin') {
             console.log('Redirecting to Admin Dashboard...');

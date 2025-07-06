@@ -168,6 +168,26 @@ class Lesson(db.Model):
     sutras = db.relationship('LessonSutra', backref='lesson', lazy=True)
     quizzes = db.relationship('Quiz', backref='lesson', lazy=True)
 
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'unit_id': self.unit_id,
+            'title': self.title,
+            'description': self.description,
+            'content_json': self.content_json,
+            'difficulty': self.difficulty,
+            'order': self.order_index,
+            'xp_reward': self.xp_reward,
+            'estimated_time': self.estimated_time,
+            'learning_objectives': self.learning_objectives,
+            'prerequisites': self.prerequisites,
+            'vedic_sutras': self.vedic_sutras,
+            'thumbnail_image': self.thumbnail_image,
+            'created_at': self.created_at.isoformat(),
+            'updated_at': self.updated_at.isoformat(),
+            'is_published': self.is_published
+        }
+
 class LessonSutra(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     lesson_id = db.Column(db.Integer, db.ForeignKey('lesson.id'), nullable=False)
@@ -615,7 +635,7 @@ def handle_questions(current_user):
         question=data['question'],
         correct_answer=data['correct_answer'],
         explanation=data.get('explanation'),
-        difficulty=DifficultyLevel(data['difficulty']),
+        difficulty=DifficultyLevel(data['difficulty'].lower()),
         question_type=data.get('question_type', 'multiple_choice'),
         options="\n".join(data.get('options', [])),
         xp_reward=data.get('xp_reward', 10)
@@ -635,7 +655,7 @@ def handle_units(current_user):
     unit = Unit(
         title=data['title'],
         description=data.get('description'),
-        difficulty=DifficultyLevel(data['difficulty']),
+        difficulty=DifficultyLevel(data['difficulty'].lower()),
         order_index=data['order_index'],
         color_theme=data.get('color_theme'),
         estimated_duration=data.get('estimated_duration', 60)
@@ -666,6 +686,25 @@ def view_user_profile(current_user, user_id):
             'total_lessons_completed': user.total_lessons_completed,
             'total_exercises_completed': user.total_exercises_completed,
         }
+    })
+
+@app.route('/api/admin/stats', methods=['GET'])
+@admin_required
+def get_admin_stats(current_user):
+    total_users = User.query.count()
+    total_lessons = Lesson.query.count()
+    total_questions = Exercise.query.count()
+    total_challenges = DailyChallenge.query.count()
+
+    today = date.today()
+    active_today = User.query.filter(User.last_login >= datetime(today.year, today.month, today.day)).count()
+
+    return jsonify({
+        'totalUsers': total_users,
+        'totalLessons': total_lessons,
+        'totalQuestions': total_questions,
+        'totalChallenges': total_challenges,
+        'activeUsersToday': active_today
     })
 
 

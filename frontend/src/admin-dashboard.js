@@ -47,6 +47,29 @@ const AdminDashboard = () => {
 
     return response.json();
   };
+  const toggleUserStatus = async (userId) => {
+  try {
+    await apiCall(`/api/admin/users/${userId}/toggle-status`, { method: 'POST' });
+    fetchData();
+  } catch (error) {
+    console.error('Failed to toggle user status:', error);
+    alert(error);
+  }
+};
+
+const changeUserRole = async (userId, currentRole) => {
+  const newRole = currentRole === 'admin' ? 'learner' : 'admin';
+  try {
+    await apiCall(`/api/admin/users/${userId}/change-role`, {
+      method: 'POST',
+      body: JSON.stringify({ role: newRole }),
+    });
+    fetchData();
+  } catch (error) {
+    console.error('Failed to change user role:', error);
+    alert('Error changing user role');
+  }
+};
 
   const fetchData = async () => {
     setLoading(true);
@@ -200,7 +223,7 @@ const AdminDashboard = () => {
                     <div className="text-sm font-medium text-gray-900">{lesson.title}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">{lesson.sutra}</div>
+                    <div className="text-sm text-gray-900">{lesson.vedic_sutras}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
@@ -212,7 +235,7 @@ const AdminDashboard = () => {
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{lesson.order}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{lesson.createdDate}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{lesson.created_at}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div className="flex space-x-2">
                       <button className="text-blue-600 hover:text-blue-900">
@@ -319,58 +342,92 @@ const AdminDashboard = () => {
     </div>
   );
 // Add Lesson Modal
-  const AddLessonModal = () => (
-  <div className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 ${showAddLessonModal ? '' : 'hidden'}`}>
-    <div className="bg-white rounded-xl p-6 w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto">
-      <div className="flex justify-between items-center mb-6">
-        <h3 className="text-xl font-bold text-gray-800">Add New Lesson</h3>
-        <button
-          onClick={() => setShowAddLessonModal(false)}
-          className="text-gray-400 hover:text-gray-600"
-        >
-          <Plus className="w-6 h-6 transform rotate-45" />
-        </button>
-      </div>
-     
-      <form className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+ const AddLessonModal = () => {
+  const handleAddLesson = async (e) => {
+    e.preventDefault();
+    const form = e.target;
+
+    try {
+      const lessonData = {
+        title: form.title.value,
+        unit_id: parseInt(form.unit.value),
+        description: form.description.value,
+        content: JSON.parse(form.content.value),
+        difficulty: form.difficulty.value.toLowerCase(),
+        order: parseInt(form.order_index.value),
+        xp_reward: parseInt(form.xp_reward.value),
+        learningObjectives: form.learning_objectives.value.split(',').map(s => s.trim()),
+        vedicSutras: form.vedic_sutras.value.split(',').map(s => s.trim())
+      };
+
+      await apiCall('/api/admin/lessons', {
+        method: 'POST',
+        body: JSON.stringify(lessonData)
+      });
+
+      setShowAddLessonModal(false);
+      fetchData();
+    } catch (error) {
+      console.error('Failed to add lesson:', error);
+      alert('Error: Invalid content JSON or missing fields');
+    }
+  };
+
+  return (
+    <div className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 ${showAddLessonModal ? '' : 'hidden'}`}>
+      <div className="bg-white rounded-xl p-6 w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-xl font-bold text-gray-800">Add New Lesson</h3>
+          <button
+            onClick={() => setShowAddLessonModal(false)}
+            className="text-gray-400 hover:text-gray-600"
+          >
+            <Plus className="w-6 h-6 transform rotate-45" />
+          </button>
+        </div>
+
+        <form className="space-y-4" onSubmit={handleAddLesson}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Lesson Title</label>
+              <input
+                name="title"
+                type="text"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="Enter lesson title"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Unit</label>
+              <select name="unit" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                <option>Select Unit</option>
+                {units.map(unit => (
+                  <option key={unit.id} value={unit.id}>{unit.title}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Lesson Title</label>
-            <input
-              type="text"
+            <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+            <textarea
+              name="description"
+              rows={3}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="Enter lesson title"
+              placeholder="Enter lesson description"
             />
           </div>
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Unit</label>
-            <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-              <option>Select Unit</option>
-              {units.map(unit => (
-                <option key={unit.id} value={unit.id}>{unit.title}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-       
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-          <textarea
-            rows={3}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            placeholder="Enter lesson description"
-          />
-        </div>
-       
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Content (JSON)
-            <span className="text-xs text-gray-500 ml-2">Structure your lesson content as JSON</span>
-          </label>
-          <textarea
-            rows={6}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono text-sm"
-            placeholder={`{
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Content (JSON)
+              <span className="text-xs text-gray-500 ml-2">Structure your lesson content as JSON</span>
+            </label>
+            <textarea
+              name="content"
+              rows={6}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+              placeholder={`{
   "sections": [
     {
       "type": "introduction",
@@ -396,78 +453,113 @@ const AdminDashboard = () => {
   ],
   "resources": ["Resource 1", "Resource 2"]
 }`}
-          />
-          <div className="mt-2 text-xs text-gray-600">
-            <p><strong>Tip:</strong> Use valid JSON format. Common structure includes sections with types like "introduction", "concept", "example", "practice", etc.</p>
+            />
+            <div className="mt-2 text-xs text-gray-600">
+              <p><strong>Tip:</strong> Use valid JSON format. Common structure includes sections with types like "introduction", "concept", "example", "practice", etc.</p>
+            </div>
           </div>
-        </div>
-       
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Difficulty</label>
-            <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-              <option>Beginner</option>
-              <option>Intermediate</option>
-              <option>Advanced</option>
-            </select>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Difficulty</label>
+              <select name="difficulty" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                <option>Beginner</option>
+                <option>Intermediate</option>
+                <option>Advanced</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Order Index</label>
+              <input
+                name="order_index"
+                type="number"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="1"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">XP Reward</label>
+              <input
+                name="xp_reward"
+                type="number"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="50"
+              />
+            </div>
           </div>
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Order Index</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Learning Objectives (comma-separated)</label>
             <input
-              type="number"
+              name="learning_objectives"
+              type="text"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="1"
+              placeholder="Objective 1, Objective 2, Objective 3"
             />
           </div>
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">XP Reward</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Vedic Sutras (comma-separated)</label>
             <input
-              type="number"
+              name="vedic_sutras"
+              type="text"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="50"
+              placeholder="Sutra 1, Sutra 2"
             />
           </div>
-        </div>
-       
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Learning Objectives (comma-separated)</label>
-          <input
-            type="text"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            placeholder="Objective 1, Objective 2, Objective 3"
-          />
-        </div>
-       
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Vedic Sutras (comma-separated)</label>
-          <input
-            type="text"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            placeholder="Sutra 1, Sutra 2"
-          />
-        </div>
-       
-        <div className="flex justify-end space-x-3 pt-4">
-          <button
-            type="button"
-            onClick={() => setShowAddLessonModal(false)}
-            className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            Create Lesson
-          </button>
-        </div>
-      </form>
+
+          <div className="flex justify-end space-x-3 pt-4">
+            <button
+              type="button"
+              onClick={() => setShowAddLessonModal(false)}
+              className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              Create Lesson
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
-  </div>
-);
-  // Add Question Modal
-  const AddQuestionModal = () => (
+  );
+};
+
+const AddQuestionModal = ({ lessons }) => {
+  const handleAddQuestion = async (e) => {
+    e.preventDefault();
+    const form = e.target;
+
+    const questionData = {
+      lesson_id: parseInt(form.lesson_id.value),
+      question: form.question.value,
+      question_type: form.question_type.value,
+      correct_answer: form.correct_answer.value,
+      explanation: form.explanation.value,
+      difficulty: 'BEGINNER', // Or add dropdown if needed
+      options: form.options.value.split('\n'),
+      xp_reward: parseInt(form.points.value)
+    };
+
+    try {
+      await apiCall('/api/admin/questions', {
+        method: 'POST',
+        body: JSON.stringify(questionData)
+      });
+      setShowAddQuestionModal(false);
+      fetchData();
+      alert('Question added successfully!');
+    } catch (error) {
+      console.error('Error adding question:', error);
+      alert('Failed to add question. Please check your input.');
+    }
+  };
+
+  return (
     <div className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 ${showAddQuestionModal ? '' : 'hidden'}`}>
       <div className="bg-white rounded-xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-6">
@@ -480,10 +572,25 @@ const AdminDashboard = () => {
           </button>
         </div>
         
-        <form className="space-y-4">
+        <form className="space-y-4" onSubmit={handleAddQuestion}>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Select Lesson</label>
+            <select
+              name="lesson_id"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+              required
+            >
+              <option value="">Select a lesson</option>
+              {lessons.map(lesson => (
+                <option key={lesson.id} value={lesson.id}>{lesson.title}</option>
+              ))}
+            </select>
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Question</label>
             <textarea
+              name="question"
               rows={3}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
               placeholder="Enter your question"
@@ -493,7 +600,7 @@ const AdminDashboard = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Question Type</label>
-              <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500">
+              <select name="question_type" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500">
                 <option>Multiple Choice</option>
                 <option>True/False</option>
                 <option>Fill in the Blank</option>
@@ -503,6 +610,7 @@ const AdminDashboard = () => {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Points</label>
               <input
+                name="points"
                 type="number"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
                 placeholder="10"
@@ -513,6 +621,7 @@ const AdminDashboard = () => {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Options (one per line)</label>
             <textarea
+              name="options"
               rows={4}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
               placeholder="Option 1&#10;Option 2&#10;Option 3&#10;Option 4"
@@ -522,6 +631,7 @@ const AdminDashboard = () => {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Correct Answer</label>
             <input
+              name="correct_answer"
               type="text"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
               placeholder="Enter correct answer"
@@ -531,6 +641,7 @@ const AdminDashboard = () => {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Explanation</label>
             <textarea
+              name="explanation"
               rows={3}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
               placeholder="Explain why this is the correct answer"
@@ -556,9 +667,39 @@ const AdminDashboard = () => {
       </div>
     </div>
   );
+};
+
 
   // Add Unit Modal
-  const AddUnitModal = () => (
+ const AddUnitModal = () => {
+  const handleAddUnit = async (e) => {
+    e.preventDefault();
+    const form = e.target;
+
+    const unitData = {
+      title: form.title.value,
+      description: form.description.value,
+      order_index: parseInt(form.order_index.value),
+      difficulty: form.difficulty.value.toUpperCase(),
+      color_theme: form.color_theme.value,
+      estimated_duration: parseInt(form.estimated_duration.value)
+    };
+
+    try {
+      await apiCall('/api/admin/units', {
+        method: 'POST',
+        body: JSON.stringify(unitData)
+      });
+      setShowAddUnitModal(false);
+      fetchData();
+      alert('Unit added successfully!');
+    } catch (err) {
+      console.error('Error adding unit:', err);
+      alert('Failed to add unit. Check your input.');
+    }
+  };
+
+  return (
     <div className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 ${showAddUnitModal ? '' : 'hidden'}`}>
       <div className="bg-white rounded-xl p-6 w-full max-w-xl mx-4">
         <div className="flex justify-between items-center mb-6">
@@ -571,10 +712,11 @@ const AdminDashboard = () => {
           </button>
         </div>
         
-        <form className="space-y-4">
+        <form className="space-y-4" onSubmit={handleAddUnit}>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Unit Title</label>
             <input
+              name="title"
               type="text"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
               placeholder="Enter unit title"
@@ -584,6 +726,7 @@ const AdminDashboard = () => {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
             <textarea
+              name="description"
               rows={3}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
               placeholder="Enter unit description"
@@ -593,7 +736,7 @@ const AdminDashboard = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Difficulty</label>
-              <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500">
+              <select name="difficulty" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500">
                 <option>Beginner</option>
                 <option>Intermediate</option>
                 <option>Advanced</option>
@@ -602,6 +745,7 @@ const AdminDashboard = () => {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Order Index</label>
               <input
+                name="order_index"
                 type="number"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
                 placeholder="1"
@@ -612,7 +756,7 @@ const AdminDashboard = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Color Theme</label>
-              <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500">
+              <select name="color_theme" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500">
                 <option value="blue">Blue</option>
                 <option value="green">Green</option>
                 <option value="purple">Purple</option>
@@ -623,6 +767,7 @@ const AdminDashboard = () => {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Est. Duration (min)</label>
               <input
+                name="estimated_duration"
                 type="number"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
                 placeholder="60"
@@ -649,6 +794,8 @@ const AdminDashboard = () => {
       </div>
     </div>
   );
+};
+
 
   // Unit Management Component
   const UnitManagement = () => (
@@ -759,8 +906,8 @@ const AdminDashboard = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {users.filter(user => 
                 (filterStatus === 'all' || 
-                 (filterStatus === 'active' && user.isActive) || 
-                 (filterStatus === 'inactive' && !user.isActive)) &&
+                 (filterStatus === 'active' && user.is_active) || 
+                 (filterStatus === 'inactive' && !user.is_active)) &&
                 (user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
                  user.email.toLowerCase().includes(searchTerm.toLowerCase()))
               ).map((user) => (
@@ -787,9 +934,9 @@ const AdminDashboard = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                      user.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                      user.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
                     }`}>
-                      {user.isActive ? 'Active' : 'Inactive'}
+                      {user.is_active ? 'Active' : 'Inactive'}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -803,27 +950,27 @@ const AdminDashboard = () => {
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{user.joinDate}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{user.created_at}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div className="flex space-x-2">
                       <button className="text-blue-600 hover:text-blue-900" title="View Profile" onClick={() => handleViewProfile(user)}>
                         <Eye className="w-4 h-4" />
                       </button>
                       <button 
-                        className={`${user.isActive ? 'text-red-600 hover:text-red-900' : 'text-green-600 hover:text-green-900'}`}
-                        title={user.isActive ? 'Deactivate' : 'Activate'}
+                        className={`${user.is_active ? 'text-red-600 hover:text-red-900' : 'text-green-600 hover:text-green-900'}`}
+                        onClick={() => toggleUserStatus(user.id)}
+                        title={user.is_active ? 'Deactivate' : 'Activate'}
                       >
-                        {user.isActive ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
+                        {user.is_active ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
                       </button>
                       <button 
                         className="text-purple-600 hover:text-purple-900"
                         title={user.role === 'admin' ? 'Revoke Admin' : 'Make Admin'}
+                        onClick={() => changeUserRole(user.id, user.role)}
                       >
                         {user.role === 'admin' ? <ShieldOff className="w-4 h-4" /> : <Shield className="w-4 h-4" />}
                       </button>
-                      <button className="text-gray-600 hover:text-gray-900">
-                        <MoreHorizontal className="w-4 h-4" />
-                      </button>
+                      
                     </div>
                   </td>
                 </tr>
@@ -1055,6 +1202,8 @@ const AdminDashboard = () => {
   );
 };
 
+
+
   const renderContent = () => {
     switch(activeTab) {
       case 'overview':
@@ -1090,14 +1239,12 @@ const AdminDashboard = () => {
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <button className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100">
-                <Settings className="w-5 h-5" />
-              </button>
+              
               <div className="flex items-center space-x-3">
                 <div className="w-8 h-8 bg-gradient-to-r from-purple-400 to-pink-400 rounded-full flex items-center justify-center text-white font-semibold text-sm">
-                  A
+                  {localStorage.getItem('username')?.charAt(0).toUpperCase() || 'A'}
                 </div>
-                <span className="text-sm font-medium text-gray-700">Admin User</span>
+                <span className="text-sm font-medium text-gray-700">{localStorage.getItem('username') || 'Admin'}</span>
               </div>
             </div>
           </div>
@@ -1136,7 +1283,10 @@ const AdminDashboard = () => {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {renderContent()}
         <AddLessonModal />
-        <AddQuestionModal />
+        <AddQuestionModal 
+        showAddQuestionModal={showAddQuestionModal}
+        setShowAddQuestionModal={setShowAddQuestionModal}
+        lessons={lessons} />
         <AddUnitModal />
         <ViewProfile 
       isOpen={showProfile} 
