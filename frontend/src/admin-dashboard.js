@@ -6,12 +6,15 @@ import {
 } from 'lucide-react';
 
 const AdminDashboard = () => {
-  const [activeTab, setActiveTab] = useState('overview');
+  
+  const [activeTab, setActiveTab] = useState(() => {
+    return localStorage.getItem('activeTab') || 'overview';
+  });
   const [users, setUsers] = useState([]);
   const [lessons, setLessons] = useState([]);
   const [questions, setQuestions] = useState([]);
   const [quizzes, setQuizzes] = useState([]);
-  const [units, setUnits] = useState([]); // ✅ Needed for Unit management and lesson modal
+  const [units, setUnits] = useState([]); 
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalLessons: 0,
@@ -104,7 +107,10 @@ const changeUserRole = async (userId, currentRole) => {
   }
 };
 
- 
+  useEffect(() => {
+    localStorage.setItem('activeTab', activeTab);
+  }, [activeTab]);
+
   useEffect(() => {
     fetchData();
   }, []);
@@ -1983,24 +1989,44 @@ const AddEditQuestionModal = ({
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {renderContent()}
-        {showQuestionModal && (
-        <AddEditQuestionModal
-          isEdit={!!editQuestionData}
-          initialData={editQuestionData || {}}
-          lessons={lessons}
-          quizzes={quizzes}
-          setShowModal={setShowQuestionModal}
-          fetchData={fetchData} /> )}
+        {showAddQuestionModal && (
+  <AddEditQuestionModal
+    isEdit={false}
+    quizzes={quizzes}
+    lessons={lessons}
+    setShowModal={setShowAddQuestionModal}
+    fetchData={fetchData}
+  />
+)}
 
-        {showQuizModal && (
+{showAddQuizModal && (
   <AddEditQuizModal
-    isEdit={!!editQuizData}
-    initialData={editQuizData || {}}
+    isEdit={false}
+    lessons={lessons}
+    setShowModal={setShowAddQuizModal}
+    fetchData={fetchData}
+  />
+)}
+{showQuizModal && (
+  <AddEditQuizModal
+    isEdit={true}
+    initialData={editQuizData}
     lessons={lessons}
     setShowModal={setShowQuizModal}
     fetchData={fetchData}
   />
 )}
+{showQuestionModal && (
+  <AddEditQuestionModal
+    isEdit={true}
+    initialData={editQuestionData}
+    quizzes={quizzes}
+    lessons={lessons}
+    setShowModal={setShowQuestionModal}
+    fetchData={fetchData}
+  />
+)}
+
 
         {showAddUnitModal && <AddEditUnitModal onClose={() => setShowAddUnitModal(false)} />}
       {showEditUnitModal && editUnitData && <AddEditUnitModal isEdit initialData={editUnitData} onClose={() => setShowEditUnitModal(false)} />}
