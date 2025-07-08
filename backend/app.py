@@ -903,6 +903,76 @@ def unlink_lesson_from_unit(current_user, unit_id, lesson_id):
     db.session.commit()
     return jsonify({'message': 'Lesson unlinked from unit'})
 
+@app.route('/api/user/me', methods=['GET'])
+@token_required
+def get_current_user(current_user):
+    user_data = {
+        "id": current_user.id,
+        "username": current_user.username,
+        "email": current_user.email,
+        "level": current_user.current_level,
+        "xp": current_user.total_xp,
+        "xpToNextLevel": 1000,  # Placeholder logic
+        "streak": current_user.daily_streak,
+        "avatar": None,  # Add field if needed
+        "achievements": [
+            {
+                "id": a.id,
+                "name": a.achievement.name,
+                "description": a.achievement.description,
+                "date": a.earned_date.isoformat()
+            }
+            for a in current_user.achievements
+        ],
+        "totalLessonsCompleted": current_user.total_lessons_completed,
+        "totalChallengesCompleted": QuizAttempt.query.filter_by(user_id=current_user.id, is_passed=True).count(),
+    }
+    return jsonify(user_data)
+
+@app.route('/api/user/stats', methods=['GET'])
+@token_required
+def get_user_stats(current_user):
+    progress = UserProgress.query.filter_by(user_id=current_user.id).all()
+    total_time = sum(p.time_spent or 0 for p in progress)
+    scores = [p.score for p in progress if p.score is not None]
+    
+    return jsonify({
+        "totalTimeSpent": total_time,
+        "averageScore": int(sum(scores) / len(scores)) if scores else 0,
+        "problemsSolved": sum(p.exercises_completed for p in progress),
+        "currentStreak": current_user.daily_streak,
+        "longestStreak": current_user.longest_streak,
+        "weeklyProgress": [70, 80, 90, 60, 50, 100, 85]  # Dummy data, replace with actual logic
+    })
+@app.route('/api/units', methods=['GET'])
+@token_required
+def get_units(current_user):
+    units = Unit.query.order_by(Unit.order_index).all()
+    progress_map = {p.lesson.unit_id: p for p in UserProgress.query.filter_by(user_id=current_user.id).all()}
+    
+    def calculate_unit_progress(unit):
+        completed_lessons = 0
+        total_lessons = len(unit.lessons)
+        for lesson in unit.lessons:
+            for p in lesson.progress:
+                if p.user_id == current_user.id and p.completed:
+                    completed_lessons += 1
+        return {
+            "id": unit.id,
+            "title": unit.title,
+            "description": unit.description,
+            "difficulty": unit.difficulty.value,
+            "colorTheme": unit.color_theme or 'blue',
+            "progress": int((completed_lessons / total_lessons) * 100) if total_lessons > 0 else 0,
+            "completedLessons": completed_lessons,
+            "lessons": total_lessons,
+            "xpReward": total_lessons * 50,
+            "isUnlocked": True  # Apply logic based on prerequisites if needed
+        }
+
+    return jsonify([calculate_unit_progress(u) for u in units])
+
+
 
 # Create tables
 with app.app_context():

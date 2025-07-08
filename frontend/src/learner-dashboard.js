@@ -8,9 +8,14 @@ import LessonsTab from './LessonsTab';
 import ChallengesTab from './ChallengesTab';
 import ProgressTab from './ProgressTab';
 import ProfileTab from './ProfileTab';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 export default function LearnerDashboard() {
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const navigate = useNavigate();
+  const location = useLocation();
+  const pathTab = location.pathname.split('/')[2] || 'dashboard';
+  const [activeTab, setActiveTab] = useState(pathTab);
+
   const [user, setUser] = useState(null);
   const [editedUser, setEditedUser] = useState(null);
   const [units, setUnits] = useState([]);
@@ -51,6 +56,11 @@ export default function LearnerDashboard() {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    // Sync tab with URL path
+    setActiveTab(pathTab);
+  }, [pathTab]);
+
   const updateUserProfile = async (updatedData) => {
     try {
       const res = await axios.put(`/api/user/me`, updatedData);
@@ -63,10 +73,14 @@ export default function LearnerDashboard() {
     }
   };
 
+  const handleTabChange = (tabId) => {
+    navigate(`/learner-dashboard/${tabId}`);
+  };
+
   const renderActiveTab = () => {
     switch (activeTab) {
       case 'dashboard':
-        return <DashboardTab user={user} units={units} stats={stats} setActiveTab={setActiveTab} />;
+        return <DashboardTab user={user} units={units} stats={stats} setActiveTab={handleTabChange} />;
       case 'lessons':
         return <LessonsTab units={units} />;
       case 'challenges':
@@ -85,7 +99,7 @@ export default function LearnerDashboard() {
           />
         );
       default:
-        return <DashboardTab user={user} units={units} stats={stats} setActiveTab={setActiveTab} />;
+        return <DashboardTab user={user} units={units} stats={stats} setActiveTab={handleTabChange} />;
     }
   };
 
@@ -159,7 +173,7 @@ export default function LearnerDashboard() {
                 ].map((item) => (
                   <button
                     key={item.id}
-                    onClick={() => setActiveTab(item.id)}
+                    onClick={() => handleTabChange(item.id)}
                     className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
                       activeTab === item.id
                         ? 'bg-blue-50 text-blue-600 border-blue-200 border'
@@ -174,10 +188,8 @@ export default function LearnerDashboard() {
             </div>
           </div>
 
-          {/* Main Tab Content */}
-          <div className="flex-1">
-            {renderActiveTab()}
-          </div>
+          {/* Active Tab Content */}
+          <div className="flex-1">{renderActiveTab()}</div>
         </div>
       </div>
     </div>
