@@ -2,13 +2,31 @@ import React, { useState, useEffect } from 'react';
 import {
   User, BookOpen, Trophy, TrendingUp, Home, Bell, Brain
 } from 'lucide-react';
-import axios from 'axios';
 import DashboardTab from './DashboardTab';
 import LessonsTab from './LessonsTab';
 import ChallengesTab from './ChallengesTab';
 import ProgressTab from './ProgressTab';
 import ProfileTab from './ProfileTab';
-import { useNavigate, useLocation } from 'react-router-dom';
+import VedicLessonPage from './LessonPage'; 
+import { useNavigate, useLocation, useParams } from 'react-router-dom';
+
+const apiCall = async (endpoint, options = {}) => {
+  const token = localStorage.getItem('token');
+  const response = await fetch(`http://localhost:5000${endpoint}`, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      ...options.headers
+    },
+    ...options
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+
+  return response.json();
+};
 
 export default function LearnerDashboard() {
   const navigate = useNavigate();
@@ -31,21 +49,20 @@ export default function LearnerDashboard() {
     const fetchData = async () => {
       try {
         const [userRes, unitsRes, lessonsRes, challengesRes, statsRes, notifsRes] = await Promise.all([
-          axios.get('/api/user/me'),
-          axios.get('/api/units'),
-          axios.get('/api/lessons'),
-          axios.get('/api/challenges'),
-          axios.get('/api/user/stats'),
-          axios.get('/api/user/notifications')
+          apiCall('/api/user/me'),
+          apiCall('/api/units'),
+          apiCall('/api/lessons'),
+          apiCall('/api/challenges'),
+          apiCall('/api/user/stats')
         ]);
 
-        setUser(userRes.data);
-        setEditedUser(userRes.data);
-        setUnits(unitsRes.data);
-        setLessons(lessonsRes.data);
-        setChallenges(challengesRes.data);
-        setStats(statsRes.data);
-        setNotifications(notifsRes.data);
+        setUser(userRes);
+        setEditedUser(userRes);
+        setUnits(unitsRes);
+        setLessons(lessonsRes);
+        setChallenges(challengesRes);
+        setStats(statsRes);
+        setNotifications(notifsRes);
       } catch (error) {
         console.error('Error loading dashboard data:', error);
       } finally {
@@ -57,19 +74,57 @@ export default function LearnerDashboard() {
   }, []);
 
   useEffect(() => {
-    // Sync tab with URL path
     setActiveTab(pathTab);
   }, [pathTab]);
 
   const updateUserProfile = async (updatedData) => {
     try {
-      const res = await axios.put(`/api/user/me`, updatedData);
-      setUser(res.data);
-      setEditedUser(res.data);
+      const res = await apiCall(`/api/user/me`, {
+        method: 'PUT',
+        body: JSON.stringify(updatedData)
+      });
+      setUser(res);
+      setEditedUser(res);
+      setIsEditingProfile(false);
       alert('Profile updated successfully!');
     } catch (error) {
       console.error('Failed to update profile:', error);
       alert('Update failed. Please try again.');
+    }
+  };
+
+  const checkUsernameAvailability = async (username) => {
+    try {
+      const response = await apiCall(`/api/user/check-username/${encodeURIComponent(username)}`);
+      return response.available;
+    } catch (error) {
+      console.error('Error checking username availability:', error);
+      throw error;
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      // Call logout API if your backend has one
+      await apiCall('/api/logout', { method: 'POST' });
+    } catch (error) {
+      console.error('Error during logout:', error);
+    } finally {
+      // Clear local storage and redirect regardless of API call success
+      localStorage.removeItem('token');
+      navigate('/');
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    try {
+      await apiCall('/api/user/delete-account', { method: 'DELETE' });
+      localStorage.removeItem('token');
+      navigate('/');
+      alert('Account deleted successfully');
+    } catch (error) {
+      console.error('Error deleting account:', error);
+      alert('Failed to delete account. Please try again.');
     }
   };
 
@@ -78,6 +133,14 @@ export default function LearnerDashboard() {
   };
 
   const renderActiveTab = () => {
+    const isLessonView = pathTab === 'lesson';
+  const lessonParams = location.pathname.split('/'); // e.g. /learner-dashboard/lesson/unit-1/0
+
+  if (isLessonView && lessonParams.length === 5) {
+    const unitId = lessonParams[3];
+    const lessonIndex = lessonParams[4];
+    return <VedicLessonPage unitId={unitId} lessonIndex={lessonIndex} units={units} />;
+  }
     switch (activeTab) {
       case 'dashboard':
         return <DashboardTab user={user} units={units} stats={stats} setActiveTab={handleTabChange} />;
@@ -96,6 +159,9 @@ export default function LearnerDashboard() {
             setEditedUser={setEditedUser}
             setIsEditingProfile={setIsEditingProfile}
             updateUserProfile={updateUserProfile}
+            checkUsernameAvailability={checkUsernameAvailability}
+            handleLogout={handleLogout}
+            handleDeleteAccount={handleDeleteAccount}
           />
         );
       default:
@@ -130,15 +196,7 @@ export default function LearnerDashboard() {
             </div>
 
             <div className="flex items-center space-x-4">
-              <div className="relative">
-                <button
-                  onClick={() => setShowNotifications(!showNotifications)}
-                  className="p-2 text-gray-600 hover:text-gray-900 relative"
-                >
-                  <Bell className="w-5 h-5" />
-                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full"></span>
-                </button>
-              </div>
+              
               <div className="flex items-center space-x-3">
                 <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white text-sm font-bold">
                   {user?.avatar ? (

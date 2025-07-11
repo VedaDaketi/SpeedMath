@@ -185,7 +185,8 @@ class Lesson(db.Model):
             'thumbnail_image': self.thumbnail_image,
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat(),
-            'is_published': self.is_published
+            'is_published': self.is_published,
+            'exercises': [e.to_dict() for e in self.exercises]
         }
 
 class LessonSutra(db.Model):
@@ -211,6 +212,24 @@ class Exercise(db.Model):
     time_limit = db.Column(db.Integer)
     tags = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'question': self.question,
+            'correct_answer': self.correct_answer,
+            'explanation': self.explanation,
+            'difficulty': self.difficulty.value if self.difficulty else None,
+            'xp_reward': self.xp_reward,
+            'question_type': self.question_type,
+            'options': self.options,
+            'hints': self.hints,
+            'step_by_step_solution': self.step_by_step_solution,
+            'time_limit': self.time_limit,
+            'tags': self.tags,
+            'created_at': self.created_at.isoformat(),
+        }    
+
 
 class Quiz(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -314,54 +333,6 @@ class ChallengeAttempt(db.Model):
     is_correct = db.Column(db.Boolean, default=False)
     time_taken = db.Column(db.Integer)
     attempted_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-def init_sample_data():
-    sutras_data = [
-        ("Ekadhikena Purvena", "By One More than Previous", "Used for squaring numbers ending in 5"),
-        ("Nikhilam Navatashcaramam Dashatah", "All from 9, Last from 10", "Subtraction from powers of 10"),
-        ("Urdhva-Tiryagbhyam", "Vertically and Crosswise", "Multiplication technique"),
-        ("Paravartya Yojayet", "Transpose and Apply", "Division method"),
-        ("Shunyam Saamyasamuccaye", "When the Sum is Zero", "For factorization"),
-        ("Anurupye Shunyamanyat", "If One is in Ratio, the Other is Zero", "Proportional operations"),
-        ("Sankalana-Vyavakalanabhyam", "By Addition and Subtraction", "Basic arithmetic"),
-        ("Puranapuranabhyam", "By Addition and Subtraction", "Quadratic equations"),
-        ("Chalana-Kalanabhyam", "Differences and Similarities", "Recurring decimals"),
-        ("Yaavadunam", "Whatever the Extent of Deficiency", "Percentage calculations"),
-        ("Vyashtisamanstih", "Part and Whole", "Ratio and proportion"),
-        ("Shesanyankena Charamena", "The Remainder by Last Digit", "Large number calculations"),
-        ("Sopaantyadvaya Mantyam", "Ultimate and Twice the Penultimate", "Coordinate geometry"),
-        ("Ekanyunena Purvena", "By One Less than Previous", "Advanced arithmetic"),
-        ("Gunitasamuchyah", "The Product of Sums", "Area calculations"),
-        ("Gunakasamuchyah", "The Factors of Sum", "Verification techniques")
-    ]
-    for i, (name, translation, description) in enumerate(sutras_data, 1):
-        db.session.add(VedicSutra(
-            name=name,
-            english_translation=translation,
-            description=description,
-            order_index=i
-        ))
-
-    achievements_data = [
-        ("First Steps", "Complete your first lesson", "🎯", "common", {"lessons_completed": 1}),
-        ("Speed Learner", "Complete 5 lessons", "⚡", "common", {"lessons_completed": 5}),
-        ("Math Enthusiast", "Complete 20 lessons", "📚", "rare", {"lessons_completed": 20}),
-        ("Vedic Master", "Complete all 30 lessons", "👑", "legendary", {"lessons_completed": 30}),
-        ("Streak Master", "Maintain a 7-day streak", "🔥", "rare", {"daily_streak": 7}),
-        ("Dedication", "Maintain a 30-day streak", "💎", "epic", {"daily_streak": 30}),
-        ("Perfect Score", "Get 100% on any quiz", "⭐", "common", {"perfect_quiz": 1}),
-        ("Quick Thinker", "Complete an exercise in under 30 seconds", "💨", "rare", {"quick_solve": 30})
-    ]
-    for name, desc, icon, rarity, criteria in achievements_data:
-        db.session.add(Achievement(
-            name=name,
-            description=desc,
-            icon=icon,
-            rarity=rarity,
-            criteria=str(criteria)
-        ))
-
-    db.session.commit()
 
 
 # Token validation decorator
@@ -944,19 +915,36 @@ def get_user_stats(current_user):
         "longestStreak": current_user.longest_streak,
         "weeklyProgress": [70, 80, 90, 60, 50, 100, 85]  # Dummy data, replace with actual logic
     })
+
 @app.route('/api/units', methods=['GET'])
 @token_required
 def get_units(current_user):
     units = Unit.query.order_by(Unit.order_index).all()
-    progress_map = {p.lesson.unit_id: p for p in UserProgress.query.filter_by(user_id=current_user.id).all()}
-    
+
     def calculate_unit_progress(unit):
         completed_lessons = 0
-        total_lessons = len(unit.lessons)
+        lesson_list = []
+
         for lesson in unit.lessons:
-            for p in lesson.progress:
-                if p.user_id == current_user.id and p.completed:
-                    completed_lessons += 1
+            is_completed = any(p.user_id == current_user.id and p.completed for p in lesson.progress)
+            if is_completed:
+                completed_lessons += 1
+
+            lesson_list.append({
+                "id": lesson.id,
+                "title": lesson.title,
+                "description": lesson.description,
+                "contentJson": lesson.content_json,
+                "difficulty": lesson.difficulty,
+                "orderIndex": lesson.order_index,
+                "exercises": [e.to_dict() for e in lesson.exercises],
+                "xpReward": lesson.xp_reward,
+                "duration": lesson.estimated_time,
+                "completed": is_completed
+            })
+
+        total_lessons = len(lesson_list)
+
         return {
             "id": unit.id,
             "title": unit.title,
@@ -965,14 +953,74 @@ def get_units(current_user):
             "colorTheme": unit.color_theme or 'blue',
             "progress": int((completed_lessons / total_lessons) * 100) if total_lessons > 0 else 0,
             "completedLessons": completed_lessons,
-            "lessons": total_lessons,
-            "xpReward": total_lessons * 50,
-            "isUnlocked": True  # Apply logic based on prerequisites if needed
+            "totalLessons": total_lessons,        # ✅ Add totalLessons
+            "lessons": lesson_list,               # ✅ Actual lesson list
+            "xpReward": total_lessons * 100,
+            "isUnlocked": True
         }
 
     return jsonify([calculate_unit_progress(u) for u in units])
 
+@app.route('/api/challenges', methods=['GET'])
+@token_required
+def get_quiz_challenges(current_user):
+    quiz_attempts = QuizAttempt.query.filter_by(user_id=current_user.id).all()
+    completed_quiz_ids = {a.quiz_id for a in quiz_attempts if a.is_passed}
 
+    quizzes = Quiz.query.all()
+    quiz_results = []
+    for q in quizzes:
+        quiz_results.append({
+            "id": q.id,
+            "title": q.title,
+            "description": q.description or "Lesson Quiz Challenge",
+            "difficulty": "intermediate", 
+            "xpReward": q.xp_reward,
+            "participants": len(q.attempts),
+            "timeLimit": q.time_limit,
+            "isUnlocked": True,
+            "isCompleted": q.id in completed_quiz_ids
+        })
+
+    return jsonify(quiz_results)
+
+@app.route('/api/lessons', methods=['GET'])
+@token_required
+def get_all_lessons(current_user):
+    lessons = Lesson.query.filter_by(is_published=True).all()
+    data = []
+    for lesson in lessons:
+        user_progress = next(
+            (p for p in lesson.progress if p.user_id == current_user.id),
+            None
+        )
+        completed = user_progress.completed if user_progress else False
+
+        data.append({
+            "id": lesson.id,
+            "title": lesson.title,
+            "description": lesson.description,
+            "unit_id": lesson.unit_id,
+            "difficulty": lesson.difficulty,
+            "xp_reward": lesson.xp_reward,
+            "completed": completed,
+            "order_index": lesson.order_index,
+        })
+    return jsonify(data)
+
+@app.route('/api/user/check-username/<username>', methods=['GET'])
+def check_username(username):
+    user = User.query.filter_by(username=username).first()
+    return jsonify({'available': user is None})
+
+
+
+@app.route('/api/user/delete-account', methods=['DELETE'])
+@token_required
+def delete_account(current_user):
+    db.session.delete(current_user)
+    db.session.commit()
+    return jsonify({'message': 'Account deleted successfully'})
 
 # Create tables
 with app.app_context():
@@ -980,3 +1028,4 @@ with app.app_context():
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
+    
