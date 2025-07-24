@@ -9,6 +9,42 @@ import os
 from functools import wraps
 from enum import Enum
 
+import google.generativeai as genai
+
+
+
+API_KEY = "AIzaSyDff4tkQ59QwProf2QVFlQl_7wkho_wEMk"
+
+SYSTEM_PROMPT = """You are a highly knowledgeable and friendly **Vedic Math Teacher**.  
+
+Your role:  
+1. Explain **any concept of Vedic Mathematics** in a simple and easy-to-understand way.  
+2. If a user asks a math problem, solve it using the **most suitable Vedic math technique** (e.g., Nikhilam Sutra, Urdhva-Tiryak Sutra, Ekadhikena Purvena, etc.).  
+3. Always show **step-by-step working** in a clear and structured way.  
+4. After solving, give a **short explanation of why this Vedic method works**, and if relevant, show the conventional method for comparison.  
+5. If there are multiple Vedic methods, mention alternatives briefly.  
+
+**Format your answer like this:**  
+
+📌 **Concept / Sutra Used**: (Name of the sutra and its meaning)  
+
+📝 **Step-by-Step Solution**:  
+1. …  
+2. …  
+3. …  
+
+✅ **Final Answer**: (Result)  
+
+💡 **Quick Explanation**: (Explain why this method works and when it is useful)  
+
+---
+
+**Now, let’s begin.**  
+You are ready to help users with Vedic Math concepts and problems."""
+
+genai.configure(api_key=API_KEY)
+model = genai.GenerativeModel("gemini-1.5-flash")
+
 app = Flask(__name__)
 
 # Configuration
@@ -1022,6 +1058,186 @@ def delete_account(current_user):
     db.session.commit()
     return jsonify({'message': 'Account deleted successfully'})
 
+@app.route('/api/quiz/<int:quiz_id>/questions', methods=['GET'])
+@token_required
+def get_quiz_questions(current_user, quiz_id):
+    questions = QuizQuestion.query.filter_by(quiz_id=quiz_id).order_by(QuizQuestion.order_index).all()
+    return jsonify([
+        {
+            "id": q.id,
+            "question": q.question,
+            "question_type": q.question_type,
+            "options": q.options.split("\n") if q.options else [],
+            "correct_answer": q.correct_answer,
+            "explanation": q.explanation,
+            "points": q.points
+        }
+        for q in questions
+    ])
+
+
+def xp_for_next_level(level):
+    # Example: 100 * level^1.5 (scales with level)
+    return int(100 * (level ** 1.5))
+
+def grant_xp(user, earned_xp, lesson_id=None):
+    """
+    Add XP to user, level up if needed, update progress, check achievements
+    """
+    user.total_xp += earned_xp
+
+    # ✅ Level-up logic
+    next_level_xp = xp_for_next_level(user.current_level)
+    while user.total_xp >= next_level_xp:
+        user.current_level += 1
+        next_level_xp = xp_for_next_level(user.current_level)
+        # You can trigger a "Level Up" achievement here
+
+    # ✅ Update progress for lesson (if given)
+    if lesson_id:
+        progress = UserProgress.query.filter_by(user_id=user.id, lesson_id=lesson_id).first()
+        if not progress:
+            progress = UserProgress(user_id=user.id, lesson_id=lesson_id, completed=True, completion_date=datetime.utcnow())
+            db.session.add(progress)
+        else:
+            progress.completed = True
+            progress.completion_date = datetime.utcnow()
+
+        user.total_lessons_completed += 1
+
+    # ✅ Check achievements
+    check_and_award_achievements(user)
+
+    db.session.commit()
+    return user.total_xp, user.current_level
+
+def check_and_award_achievements(user):
+    achievements = Achievement.query.all()
+    earned_ids = {ua.achievement_id for ua in user.achievements}
+
+    for ach in achievements:
+        if ach.id in earned_ids:
+            continue
+        
+        # Example criteria
+        if ach.criteria == "first_lesson" and user.total_lessons_completed >= 1:
+            award_achievement(user, ach)
+        elif ach.criteria == "level_5" and user.current_level >= 5:
+            award_achievement(user, ach)
+
+def award_achievement(user, achievement):
+    new_ach = UserAchievement(user_id=user.id, achievement_id=achievement.id)
+    db.session.add(new_ach)
+    user.total_xp += achievement.xp_reward  # reward XP for achievement
+
+@app.route('/api/lessons/<int:lesson_id>/complete', methods=['POST'])
+@token_required
+def complete_lesson(current_user, lesson_id):
+    lesson = Lesson.query.get_or_404(lesson_id)
+    xp_earned, level = grant_xp(current_user, lesson.xp_reward, lesson_id=lesson.id)
+
+    return jsonify({
+        "message": "Lesson completed!",
+        "xp_earned": lesson.xp_reward,
+        "total_xp": xp_earned,
+        "level": level
+    })
+
+@app.route('/api/challenge/complete/<int:challenge_id>', methods=['POST'])
+@token_required
+def complete_challenge(current_user, challenge_id):
+    challenge = DailyChallenge.query.get_or_404(challenge_id)
+
+    # Check if user already attempted
+    existing_attempt = ChallengeAttempt.query.filter_by(
+        user_id=current_user.id, 
+        challenge_id=challenge.id
+    ).first()
+
+    # Parse request to check correctness
+    data = request.get_json()
+    user_answer = data.get("answer")
+
+    is_correct = str(user_answer).strip().lower() == str(challenge.correct_answer).strip().lower()
+
+    if existing_attempt:
+        return jsonify({"error": "Challenge already attempted"}), 400
+
+    # Save attempt
+    attempt = ChallengeAttempt(
+        user_id=current_user.id,
+        challenge_id=challenge.id,
+        user_answer=user_answer,
+        is_correct=is_correct,
+        time_taken=data.get("time_taken", 0)
+    )
+    db.session.add(attempt)
+
+    xp_earned = 0
+    if is_correct:
+        # ✅ Award XP
+        xp_earned = challenge.xp_reward
+        grant_xp(current_user, xp_earned)
+
+        # ✅ Update streaks
+        today = date.today()
+        if current_user.last_activity_date == today - timedelta(days=1):
+            current_user.daily_streak += 1
+        elif current_user.last_activity_date != today:
+            current_user.daily_streak = 1
+        
+        current_user.last_activity_date = today
+        if current_user.daily_streak > current_user.longest_streak:
+            current_user.longest_streak = current_user.daily_streak
+
+    db.session.commit()
+
+    return jsonify({
+        "message": "Challenge completed!",
+        "is_correct": is_correct,
+        "xp_earned": xp_earned,
+        "total_xp": current_user.total_xp,
+        "current_level": current_user.current_level,
+        "daily_streak": current_user.daily_streak,
+        "longest_streak": current_user.longest_streak
+    }), 200
+"""
+@app.route('/api/exercises/random', methods=['GET'])
+@token_required
+def get_random_exercises():
+    # Get 20 random exercises (more than needed for 2 minutes)
+    exercises = Exercise.query.order_by(func.random()).limit(20).all()
+    return jsonify([{
+        'id': ex.id,
+        'question': ex.question,
+        'correct_answer': ex.correct_answer,
+        'difficulty': ex.difficulty.value
+    } for ex in exercises])
+"""
+@app.route("/api/chat", methods=["POST"])
+@token_required
+def chat(current_user):
+    try:
+        data = request.json
+        user_message = data.get("message", "")
+
+        if not user_message.strip():
+            return jsonify({"error": "Message cannot be empty"}), 400
+
+        # Combine system prompt + user message
+        prompt = f"{SYSTEM_PROMPT}\nUser: {user_message}\nAssistant:"
+
+        # Get response from Gemini
+        response = model.generate_content(prompt)
+
+        # Extract response text
+        bot_reply = response.text if response else "Sorry, I couldn't generate a response."
+
+        return jsonify({"reply": bot_reply})
+
+    except Exception as e:
+        print("Error:", e)
+        return jsonify({"error": str(e)}), 500
 # Create tables
 with app.app_context():
     db.create_all()

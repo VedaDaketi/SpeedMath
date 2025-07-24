@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User, Lock, Mail, Eye, EyeOff, Calendar, GraduationCap } from 'lucide-react';
+import { User, Lock, Mail, Eye, EyeOff, Calendar, GraduationCap, Brain } from 'lucide-react';
 
 
 export default function Auth() {
@@ -89,8 +89,10 @@ export default function Auth() {
           <div className="flex-1 p-8 flex flex-col justify-center text-white">
             <div className="mb-8">
               <div className="flex items-center mb-8">
-                <div className="w-8 h-8 bg-white rounded mr-3"></div>
-                <h1 className="text-2xl font-bold">SpeedMath</h1>
+                <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
+                  <Brain className="w-5 h-5 text-white" />
+                </div>
+                <h1 className="text-2xl font-bold"> SpeedMath</h1>
               </div>
             </div>
             
